@@ -1,0 +1,25 @@
+{
+  "required": true,
+  "package": "com.einsteinmods.shulkertoolkit.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "AbstractContainerMenuMixin",
+    "AbstractCraftingMenuMixin",
+    "BundleContentsAccessor",
+    "ItemContainerContentsAccessor",
+    "ItemEntityMixin",
+    "ItemStackAccessor",
+    "LivingEntityMixin",
+    "ServerGamePacketListenerImplMixin",
+    "ServerPlaceRecipeMixin",
+    "ServerPlayerGameModeMixin",
+    "ServerPlayerMixin",
+    "StackedItemContentsAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

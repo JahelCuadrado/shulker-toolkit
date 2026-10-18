@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "shulkertoolkit-gametest",
+  "version": "1.0.0",
+  "name": "Shulker Toolkit GameTests",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": [
+      "com.einsteinmods.shulkertoolkit.gametest.AutoRefillGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.CraftFromBoxesGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.EnderChestSyncGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.PickFromShulkerGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.PickupIntoBoxesGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.PinnedWindowClicksGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.ServerPolicyGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.StorageClicksGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.TakeOutRequestGameTest"
+    ]
+  },
+  "depends": {
+    "shulkertoolkit": "*"
+  }
+}

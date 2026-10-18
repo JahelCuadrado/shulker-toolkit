@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "shulkertoolkit",
+  "version": "${version}",
+  "name": "Shulker Toolkit",
+  "description": "Everything you need to live out of shulker boxes: see inside them, move items in and out without placing them, craft, build and refill straight from them.",
+  "authors": [
+    "Jahel Cuadrado"
+  ],
+  "contact": {
+    "homepage": "https://github.com/JahelCuadrado/shulker-toolkit",
+    "sources": "https://github.com/JahelCuadrado/shulker-toolkit",
+    "issues": "https://github.com/JahelCuadrado/shulker-toolkit/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/shulkertoolkit/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.einsteinmods.shulkertoolkit.ShulkerToolkit"
+    ],
+    "client": [
+      "com.einsteinmods.shulkertoolkit.client.ShulkerToolkitClient"
+    ],
+    "modmenu": [
+      "com.einsteinmods.shulkertoolkit.client.config.ModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    "shulkertoolkit.mixins.json",
+    {
+      "config": "shulkertoolkit.client.mixins.json",
+      "environment": "client"
+    },
+    {
+      "config": "shulkertoolkit.litematica.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "recommends": {
+    "modmenu": "*"
+  },
+  "suggests": {
+    "litematica": "*",
+    "litematica_printer": "*"
+  }
+}

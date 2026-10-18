@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "package": "com.einsteinmods.shulkertoolkit.client.compat.litematica.mixin",
+  "plugin": "com.einsteinmods.shulkertoolkit.client.compat.litematica.LitematicaMixinPlugin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "GuideMixin",
+    "InventoryUtilsMixin",
+    "MinecraftMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

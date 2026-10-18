@@ -1,0 +1,117 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'com.diffplug.spotless' version "${spotless_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	maven {
+		name = 'TerraformersMC'
+		url = 'https://maven.terraformersmc.com/releases'
+		content { includeGroup 'com.terraformersmc' }
+	}
+	maven {
+		name = 'Modrinth'
+		url = 'https://api.modrinth.com/maven'
+		content { includeGroup 'maven.modrinth' }
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"shulkertoolkit" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "shulkertoolkit-gametest"
+		enableGameTests = true
+		enableClientGameTests = false
+		eula = true
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// Optional at runtime ("recommends" in fabric.mod.json): "Configure" button in the mod list.
+	clientCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+	localRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
+
+	// Optional at runtime ("suggests"): take blocks out of shulker boxes for Easy Place and the
+	// printer. Only the client source set sees them; mixins into them apply only when installed.
+	clientCompileOnly "maven.modrinth:litematica:${project.litematica_version}"
+	clientCompileOnly "maven.modrinth:malilib:${project.malilib_version}"
+	clientCompileOnly "maven.modrinth:litematica-printer:${project.litematica_printer_version}"
+
+	// ClientSettingsFile is plain Java; its load/migration is tested without Minecraft.
+	testImplementation sourceSets.client.output
+	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
+	testImplementation platform("org.junit:junit-bom:${project.junit_version}")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+	withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.release = 25
+	options.encoding = "UTF-8"
+	// Line numbers stay for crash reports; local variable tables only serve debuggers and cost
+	// about 18 KB of the jar budget.
+	options.debugOptions.debugLevel = "source,lines"
+	options.compilerArgs.addAll(["-Xlint:all,-processing,-classfile,-serial", "-Werror"])
+}
+
+test {
+	useJUnitPlatform()
+}
+
+jar {
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	from("LICENSE") {
+		rename { "${it}_$projectName" }
+	}
+}
+
+spotless {
+	java {
+		target "src/*/java/**/*.java"
+		// 1.36.1: newest version compatible with Spotless 8.10.4 (1.37.0 fails with NoSuchMethodError).
+		googleJavaFormat("1.36.1")
+		removeUnusedImports()
+		trimTrailingWhitespace()
+		endWithNewline()
+	}
+}
