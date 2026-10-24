@@ -12,9 +12,13 @@
       "com.einsteinmods.shulkertoolkit.gametest.PickFromShulkerGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.PickupIntoBoxesGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.PinnedWindowClicksGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.PinnedWindowStationsGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.ServerPolicyGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.StorageClicksGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.TakeOutRequestGameTest"
+    ],
+    "fabric-client-gametest": [
+      "com.einsteinmods.shulkertoolkit.client.storage.PinnedStationsClientGameTest"
     ]
   },
   "depends": {

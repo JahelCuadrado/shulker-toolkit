@@ -11,6 +11,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.InputQuirks;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.locale.Language;
@@ -112,6 +114,15 @@ public final class StorageInput {
     return state != null
         && state.singleItemMovementAllowed()
         && isHeld(preferences().singleItemMovement());
+  }
+
+  /**
+   * Whether a text field of {@code screen} takes the keys now (the anvil's name with an item in the
+   * anvil): vanilla {@code AnvilScreen#keyPressed} then keeps every key for it ({@code
+   * EditBox#canConsumeInput}), so the mod's keys must leave them too. One call and a type check.
+   */
+  public static boolean isTyping(Screen screen) {
+    return screen.getFocused() instanceof EditBox field && field.canConsumeInput();
   }
 
   /**

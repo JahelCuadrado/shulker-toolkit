@@ -22,10 +22,18 @@ public final class PinnedLayout {
   /** Windows in one row above or below the container, or in one column beside it. */
   public static final int ROW_WINDOWS = 3;
 
-  /** Window scales are eighths: full size, then smaller steps down to half size. */
+  /** Window scales are eighths: full size, then smaller steps down to {@link #MIN_SCALE}. */
   public static final int FULL_SCALE = 8;
 
-  public static final int MIN_SCALE = 4;
+  /**
+   * The smallest window: 3/8, slots of 6.75 GUI pixels with 6-pixel items. Small GUIs come with
+   * large GUI scales (427 x 240 is GUI scale 2 at 854 x 480, 4 on a Retina Mac's default window),
+   * so items stay 12 to 24 screen pixels, still recognisable; at 2/8 they would be 4 GUI pixels. It
+   * is also what fits there beside the recipe book: 240 high leaves 33 pixels above and below the
+   * screen, a 78-high shulker window fits at 3/8 (30) but not at 4/8 (39), and slots of 8 pixels
+   * (35 high) would not fit either.
+   */
+  public static final int MIN_SCALE = 3;
 
   private PinnedLayout() {}
 

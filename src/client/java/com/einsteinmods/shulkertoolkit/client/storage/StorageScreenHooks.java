@@ -31,11 +31,18 @@ public final class StorageScreenHooks {
   public static void register() {
     ScreenEvents.AFTER_INIT.register(
         (minecraft, screen, width, height) -> {
+          if (!PinnedWindows.supports(screen)) {
+            // Pins waiting for the next screen do not survive any other screen.
+            PinnedWindows.forgetPending();
+          }
           if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) {
             return;
           }
+          // A text field taking the keys (the anvil's name) keeps them, as in vanilla.
           ScreenKeyboardEvents.allowKeyPress(screen)
-              .register((current, event) -> !StorageInput.toggle(event));
+              .register(
+                  (current, event) ->
+                      StorageInput.isTyping(current) || !StorageInput.toggle(event));
           if (!(screen instanceof CreativeModeInventoryScreen)
               && (Object) screen instanceof AbstractContainerScreenAccessor access) {
             if (PinnedWindows.supports(screen)) {
@@ -114,11 +121,12 @@ public final class StorageScreenHooks {
     ScreenKeyboardEvents.allowKeyPress(screen)
         .register(
             (current, event) ->
-                !offer(
-                    containerScreen,
-                    access,
-                    actions,
-                    (slot, stack) -> actions.onKeyPressed(event, slot, stack)));
+                StorageInput.isTyping(current)
+                    || !offer(
+                        containerScreen,
+                        access,
+                        actions,
+                        (slot, stack) -> actions.onKeyPressed(event, slot, stack)));
     ScreenEvents.afterBackground(screen)
         .register(
             (current, graphics, mouseX, mouseY, partialTick) ->

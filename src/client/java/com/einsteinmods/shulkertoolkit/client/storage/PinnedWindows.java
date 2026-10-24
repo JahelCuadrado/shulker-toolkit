@@ -7,6 +7,7 @@ import com.einsteinmods.shulkertoolkit.core.PinnedAction;
 import com.einsteinmods.shulkertoolkit.core.PinnedLayout;
 import com.einsteinmods.shulkertoolkit.core.PinnedPaths;
 import com.einsteinmods.shulkertoolkit.network.PinnedWindowClickPayload;
+import com.einsteinmods.shulkertoolkit.transfer.PinnedWindowClicks;
 import com.einsteinmods.shulkertoolkit.transfer.StorageKind;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.util.Arrays;
@@ -20,10 +21,16 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractFurnaceScreen;
+import net.minecraft.client.gui.screens.inventory.AnvilScreen;
+import net.minecraft.client.gui.screens.inventory.CartographyTableScreen;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.client.gui.screens.inventory.CraftingScreen;
+import net.minecraft.client.gui.screens.inventory.GrindstoneScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.gui.screens.inventory.LoomScreen;
 import net.minecraft.client.gui.screens.inventory.ShulkerBoxScreen;
+import net.minecraft.client.gui.screens.inventory.SmithingScreen;
+import net.minecraft.client.gui.screens.inventory.StonecutterScreen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.LocalPlayer;
@@ -31,6 +38,7 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.util.Util;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -42,7 +50,8 @@ import org.jspecify.annotations.Nullable;
  * where middle click clones) on a shulker box, ender chest or bundle pins its window next to the
  * screen, up to the player's maximum ({@link PinnedPaths#MAX_DEPTH} at most) at once, also from
  * inside another window; middle click on it again or on the window title unpins it, closing the
- * screen removes them all. Clicks in a window, Shift-clicks from the inventory into the last window
+ * screen removes them all (a switch to another supported screen keeps the ones whose box is in the
+ * player's inventory). Clicks in a window, Shift-clicks from the inventory into the last window
  * used and number keys over a window slot each send one {@link PinnedWindowClickPayload}; the
  * server applies them and vanilla's menu sync shows the result (no prediction). Every hook costs
  * one check while nothing is pinned; with windows, a frame resolves each window (a few comparisons
@@ -63,6 +72,13 @@ public final class PinnedWindows {
   private static final float BUNDLE_PITCH_RANGE = 0.4F;
 
   private static final int NONE = -1;
+
+  /**
+   * How long pins wait for the next screen after one is removed without the player closing it: a
+   * server switching menus closes the old one first (a close packet, the world shown for a moment)
+   * and opens the next one in the same tick, as Handy Tables going from a chest to a station.
+   */
+  private static final long SWITCH_MILLIS = 1000L;
 
   private static final PinnedWindow[] WINDOWS = new PinnedWindow[PinnedPaths.MAX_DEPTH];
   private static final int[] WIDTHS = new int[PinnedPaths.MAX_DEPTH];
@@ -86,27 +102,50 @@ public final class PinnedWindows {
   private static int laidHeight;
   private static boolean laidRecipeBook;
 
+  /** While pins wait for the next screen: the inventory index of each window's root, and until. */
+  private static final int[] PENDING_ROOTS = new int[PinnedPaths.MAX_DEPTH];
+
+  private static boolean pending;
+  private static long pendingUntil;
+
   private PinnedWindows() {}
 
   /**
-   * The screens with pinned windows: inventory, crafting table, chests, shulker boxes, furnaces.
+   * The screens with pinned windows: inventory, crafting table, chests, shulker boxes, furnaces and
+   * the work stations (stonecutter, loom, cartography table, smithing table, grindstone, anvil).
+   * All of them draw everything inside their image (176 x 166, no recipe book but the crafting
+   * one), so windows go beside it as with a chest. Keep in step with {@code
+   * PinnedWindowClicks#supports}.
    */
   public static boolean supports(Screen candidate) {
     return candidate instanceof InventoryScreen
         || candidate instanceof CraftingScreen
         || candidate instanceof ContainerScreen
         || candidate instanceof ShulkerBoxScreen
-        || candidate instanceof AbstractFurnaceScreen;
+        || candidate instanceof AbstractFurnaceScreen
+        || candidate instanceof StonecutterScreen
+        || candidate instanceof LoomScreen
+        || candidate instanceof CartographyTableScreen
+        || candidate instanceof SmithingScreen
+        || candidate instanceof GrindstoneScreen
+        || candidate instanceof AnvilScreen;
   }
 
   /**
-   * Hooks a supported screen after each init. A resize keeps its windows; another screen starts
-   * empty. Registered before the container item actions, so a window click never reaches them.
+   * Hooks a supported screen after each init. A resize keeps its windows; another screen takes the
+   * windows of the one just left when it came straight from it ({@link #keepForNextScreen}), else
+   * starts empty. Registered before the container item actions, so a window click never reaches
+   * them.
    */
   public static void install(
       AbstractContainerScreen<?> containerScreen, AbstractContainerScreenAccessor screenAccess) {
     if (screen != containerScreen) {
-      clear();
+      if (pending && Util.getMillis() <= pendingUntil) {
+        pending = false;
+        carryOver(containerScreen.getMenu());
+      } else {
+        clear();
+      }
     }
     screen = containerScreen;
     access = screenAccess;
@@ -126,9 +165,75 @@ public final class PinnedWindows {
         .register(
             current -> {
               if (current == screen) {
-                clear();
+                keepForNextScreen();
               }
             });
+  }
+
+  /** Unpins every window: the player closed the container ({@code LocalPlayerMixin}). */
+  public static void unpinAll() {
+    clear();
+  }
+
+  /** Another screen than a supported container screen opened: pins left behind are dropped. */
+  public static void forgetPending() {
+    if (pending) {
+      clear();
+    }
+  }
+
+  /**
+   * The screen is going away without the player closing it (a menu switch): its windows wait for
+   * the next supported screen, by the inventory slot of their root. A window whose root is not a
+   * player inventory slot (a box in a chest) cannot follow and is dropped.
+   */
+  private static void keepForNextScreen() {
+    AbstractContainerScreen<?> current = screen;
+    LocalPlayer player = Minecraft.getInstance().player;
+    if (current == null || player == null || count == 0) {
+      clear();
+      return;
+    }
+    AbstractContainerMenu menu = current.getMenu();
+    for (int index = count - 1; index >= 0; index--) {
+      int root = WINDOWS[index].path()[0];
+      Slot slot = root < menu.slots.size() ? menu.getSlot(root) : null;
+      if (slot == null || slot.container != player.getInventory()) {
+        remove(index);
+      }
+    }
+    for (int index = 0; index < count; index++) {
+      PENDING_ROOTS[index] = menu.getSlot(WINDOWS[index].path()[0]).getContainerSlot();
+    }
+    pending = count > 0;
+    pendingUntil = Util.getMillis() + SWITCH_MILLIS;
+    screen = null;
+    access = null;
+    focused = NONE;
+    hoveredWindow = NONE;
+    hoveredCell = PinnedWindow.NO_CELL;
+    pressConsumed = false;
+  }
+
+  /** Puts the waiting windows on {@code menu}'s slots for the same inventory slots. */
+  private static void carryOver(AbstractContainerMenu menu) {
+    LocalPlayer player = Minecraft.getInstance().player;
+    if (player == null) {
+      return;
+    }
+    for (int index = 0; index < count; index++) {
+      Slot slot = PinnedWindowClicks.inventorySlot(player, menu, PENDING_ROOTS[index]);
+      if (slot == null) {
+        PENDING_ROOTS[index] = NONE;
+      } else {
+        WINDOWS[index].reroot(slot.index);
+      }
+    }
+    for (int index = count - 1; index >= 0; index--) {
+      if (PENDING_ROOTS[index] == NONE) {
+        remove(index);
+      }
+    }
   }
 
   /** Whether {@code slot}'s item has its own window pinned. One field read while none is. */
@@ -342,14 +447,19 @@ public final class PinnedWindows {
     return true;
   }
 
-  /** Number keys and the offhand key over a window slot swap with it, as over a vanilla slot. */
+  /**
+   * Number keys and the offhand key over a window slot swap with it, as over a vanilla slot; not
+   * while a text field takes the keys (the anvil's name), as vanilla {@code
+   * AnvilScreen#keyPressed}.
+   */
   private static boolean onKeyPressed(KeyEvent event) {
     AbstractContainerScreen<?> current = screen;
     if (count == 0
         || current == null
         || hoveredCell == PinnedWindow.NO_CELL
         || hoveredWindow == NONE
-        || !current.getMenu().getCarried().isEmpty()) {
+        || !current.getMenu().getCarried().isEmpty()
+        || StorageInput.isTyping(current)) {
       return false;
     }
     PinnedWindow window = WINDOWS[hoveredWindow];
@@ -366,10 +476,18 @@ public final class PinnedWindows {
         button = slot;
       }
     }
-    if (button == NONE || minecraft.player == null) {
+    LocalPlayer player = minecraft.player;
+    if (button == NONE || player == null) {
       return false;
     }
-    send(current, window, PinnedAction.SWAP, hoveredCell, button, minecraft.player);
+    // The menu's slot rules, as the server checks them: a refused swap is not sent.
+    if (PinnedWindowClicks.swapAllowed(
+        player,
+        PinnedWindowClicks.inventorySlot(player, current.getMenu(), button),
+        player.getInventory().getItem(button),
+        window.stackAt(hoveredCell))) {
+      send(current, window, PinnedAction.SWAP, hoveredCell, button, player);
+    }
     return true;
   }
 
@@ -578,6 +696,7 @@ public final class PinnedWindows {
   }
 
   private static void clear() {
+    pending = false;
     Arrays.fill(WINDOWS, null);
     count = 0;
     focused = NONE;

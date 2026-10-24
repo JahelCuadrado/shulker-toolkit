@@ -9,6 +9,7 @@
     "GuiGraphicsExtractorMixin",
     "ItemStackMixin",
     "KeyboardHandlerMixin",
+    "LocalPlayerMixin",
     "MultiPlayerGameModeMixin",
     "WindowMixin"
   ],

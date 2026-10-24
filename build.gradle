@@ -39,8 +39,24 @@ fabricApi {
 		createSourceSet = true
 		modId = "shulkertoolkit-gametest"
 		enableGameTests = true
-		enableClientGameTests = false
+		enableClientGameTests = true
 		eula = true
+	}
+}
+
+// Client GameTests open a real game window: start it muted, small (pinned windows still fit beside
+// a station at GUI scale 1) and capped at 30 FPS, so it stays light while the machine is in use.
+// The run directory is cleared before each run (deleteGameTestRunDir), so the options are written
+// right before launch.
+loom.runs.matching { it.name == "clientGameTest" }.configureEach {
+	programArgs "--width", "640", "--height", "360"
+}
+
+tasks.named("runClientGameTest") {
+	def optionsFile = file("build/run/clientGameTest/options.txt")
+	doFirst {
+		optionsFile.parentFile.mkdirs()
+		optionsFile.text = "soundCategory_master:0.0\nmaxFps:30\nrenderDistance:2\nguiScale:1\n"
 	}
 }
 
@@ -58,6 +74,9 @@ dependencies {
 	clientCompileOnly "maven.modrinth:litematica:${project.litematica_version}"
 	clientCompileOnly "maven.modrinth:malilib:${project.malilib_version}"
 	clientCompileOnly "maven.modrinth:litematica-printer:${project.litematica_printer_version}"
+
+	// Client GameTests drive the mod's client classes (pinned windows).
+	gametestImplementation sourceSets.client.output
 
 	// ClientSettingsFile is plain Java; its load/migration is tested without Minecraft.
 	testImplementation sourceSets.client.output

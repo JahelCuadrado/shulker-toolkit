@@ -18,6 +18,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
@@ -49,6 +50,7 @@ public final class PinnedWindowClicksGameTest {
   private static final int DIRT_HALF = 7;
   private static final int FULL_STACK = 64;
   private static final int STONE_COUNT = 20;
+  private static final int TABLE_COUNT = 3;
   private static final int NO_SLOT = -1;
   private static final ServerPolicy PINNING_FORBIDDEN =
       new ServerPolicy(true, true, true, true, true, true, true, true, false);
@@ -137,6 +139,89 @@ public final class PinnedWindowClicksGameTest {
         slotsOf(box(player)).get(FIRST_SLOT).getCount() == FULL_STACK, "the stack filled first");
     helper.assertTrue(
         player.getInventory().getItem(OTHER_INVENTORY_SLOT).isEmpty(), "the source slot is empty");
+    helper.succeed();
+  }
+
+  /**
+   * A slot that never gives its last item away (as Handy Tables' locked station slot): the box must
+   * not get the item while the slot keeps it.
+   */
+  @GameTest
+  public void shiftClickFromASlotThatKeepsItsLastItemIsRefused(GameTestHelper helper) {
+    Player player = playerWithBox(helper, new ItemStack(Items.SHULKER_BOX));
+    ItemStack tables = new ItemStack(Items.CRAFTING_TABLE, TABLE_COUNT);
+    player.getInventory().setItem(OTHER_INVENTORY_SLOT, tables.copy());
+    player.containerMenu.slots.set(
+        OTHER_MENU_SLOT, new KeepsLastItemSlot(player.containerMenu.getSlot(OTHER_MENU_SLOT)));
+
+    helper.assertFalse(
+        click(player, PinnedAction.QUICK_MOVE_IN, OTHER_MENU_SLOT, PinnedAction.PRIMARY_BUTTON),
+        "the slot gives less than the box would take");
+
+    helper.assertTrue(
+        ShulkerFixtures.countInBox(box(player), Items.CRAFTING_TABLE) == 0, "the box is empty");
+    helper.assertTrue(
+        ItemStack.matches(player.getInventory().getItem(OTHER_INVENTORY_SLOT), tables),
+        "the slot keeps all its tables");
+    helper.succeed();
+  }
+
+  /** A hotbar slot that refuses to give its item (a locked slot): the swap is refused. */
+  @GameTest
+  public void swapRespectsAHotbarSlotThatRefusesPickup(GameTestHelper helper) {
+    Player player =
+        playerWithBox(helper, ShulkerFixtures.box(new ItemStack(Items.DIRT, DIRT_COUNT)));
+    ItemStack table = new ItemStack(Items.CRAFTING_TABLE);
+    player.getInventory().setItem(0, table.copy());
+    player.containerMenu.slots.set(
+        HOTBAR_MENU_SLOT, new RefusingSlot(player.containerMenu.getSlot(HOTBAR_MENU_SLOT), true));
+
+    helper.assertFalse(click(player, PinnedAction.SWAP, FIRST_SLOT, 0), "the slot keeps its table");
+    helper.assertFalse(
+        PinnedWindowClicks.swapAllowed(
+            player,
+            PinnedWindowClicks.inventorySlot(player, player.containerMenu, 0),
+            table,
+            ItemStack.EMPTY),
+        "the client check refuses it too");
+
+    helper.assertTrue(ItemStack.matches(player.getInventory().getItem(0), table), "table kept");
+    helper.assertTrue(
+        ShulkerFixtures.countInBox(box(player), Items.DIRT) == DIRT_COUNT, "dirt kept");
+    helper.succeed();
+  }
+
+  /** A hotbar slot that refuses the window's item: the swap is refused. */
+  @GameTest
+  public void swapRespectsAHotbarSlotThatRefusesTheItem(GameTestHelper helper) {
+    Player player =
+        playerWithBox(helper, ShulkerFixtures.box(new ItemStack(Items.DIRT, DIRT_COUNT)));
+    player.containerMenu.slots.set(
+        HOTBAR_MENU_SLOT, new RefusingSlot(player.containerMenu.getSlot(HOTBAR_MENU_SLOT), false));
+
+    helper.assertFalse(click(player, PinnedAction.SWAP, FIRST_SLOT, 0), "dirt may not go there");
+
+    helper.assertTrue(player.getInventory().getItem(0).isEmpty(), "the hotbar slot stays empty");
+    helper.assertTrue(
+        ShulkerFixtures.countInBox(box(player), Items.DIRT) == DIRT_COUNT, "dirt kept");
+    helper.succeed();
+  }
+
+  /** A hotbar slot that keeps its last item (Handy Tables' lone station): no copy in the box. */
+  @GameTest
+  public void swapFromASlotThatKeepsItsLastItemIsRefused(GameTestHelper helper) {
+    Player player = playerWithBox(helper, new ItemStack(Items.SHULKER_BOX));
+    ItemStack table = new ItemStack(Items.CRAFTING_TABLE);
+    player.getInventory().setItem(0, table.copy());
+    player.containerMenu.slots.set(
+        HOTBAR_MENU_SLOT, new KeepsLastItemSlot(player.containerMenu.getSlot(HOTBAR_MENU_SLOT)));
+
+    helper.assertFalse(
+        click(player, PinnedAction.SWAP, FIRST_SLOT, 0), "the slot gives less than the swap");
+
+    helper.assertTrue(ItemStack.matches(player.getInventory().getItem(0), table), "table kept");
+    helper.assertTrue(
+        ShulkerFixtures.countInBox(box(player), Items.CRAFTING_TABLE) == 0, "no table in the box");
     helper.succeed();
   }
 
@@ -364,6 +449,40 @@ public final class PinnedWindowClicksGameTest {
 
     helper.assertTrue(sent.equals(PinnedWindowClickPayload.CODEC.decode(buffer)), "same payload");
     helper.succeed();
+  }
+
+  /** Takes stop one short of the whole stack, as Handy Tables' {@code LockedStationSlot}. */
+  private static final class KeepsLastItemSlot extends Slot {
+    KeepsLastItemSlot(Slot original) {
+      super(original.container, original.getContainerSlot(), original.x, original.y);
+      this.index = original.index;
+    }
+
+    @Override
+    public ItemStack remove(int amount) {
+      return super.remove(Math.min(amount, getItem().getCount() - 1));
+    }
+  }
+
+  /** Refuses taking its item ({@code mayPickup}) or placing any item ({@code mayPlace}). */
+  private static final class RefusingSlot extends Slot {
+    private final boolean refusesPickup;
+
+    RefusingSlot(Slot original, boolean refusesPickup) {
+      super(original.container, original.getContainerSlot(), original.x, original.y);
+      this.index = original.index;
+      this.refusesPickup = refusesPickup;
+    }
+
+    @Override
+    public boolean mayPickup(Player player) {
+      return !refusesPickup;
+    }
+
+    @Override
+    public boolean mayPlace(ItemStack itemStack) {
+      return refusesPickup;
+    }
   }
 
   private static Player playerWithBox(GameTestHelper helper, ItemStack box) {

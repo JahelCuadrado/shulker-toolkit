@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 — 2026-10-24
+
+- **Middle-click windows at the work stations:** open your shulker boxes, bundles and ender chest
+  next to the stonecutter, loom, cartography table, smithing table, grindstone and anvil too.
+- **Windows that stay with you:** they stay open when you go straight from one of these screens to
+  another, for example between work stations with Handy Tables.
+- **Room on any screen:** on small screens or with the recipe book open, windows shrink to fit.
+
 ## 1.0.0 — 2026-10-18
 
 First release for Minecraft 26.3 (Fabric). Everything you need to live out of shulker boxes: see

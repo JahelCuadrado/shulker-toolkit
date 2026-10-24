@@ -105,6 +105,11 @@ final class PinnedWindow {
     return path;
   }
 
+  /** Moves the window's root to {@code menuSlot}: the same inventory slot in another menu. */
+  void reroot(int menuSlot) {
+    path[0] = menuSlot;
+  }
+
   int depth() {
     return depth;
   }

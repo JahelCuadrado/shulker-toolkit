@@ -15,11 +15,17 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.AbstractFurnaceMenu;
+import net.minecraft.world.inventory.AnvilMenu;
+import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.GrindstoneMenu;
 import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.LoomMenu;
 import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.SmithingMenu;
+import net.minecraft.world.inventory.StonecutterMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.component.BundleContents;
@@ -87,17 +93,28 @@ public final class PinnedWindowClicks {
     if (edit.changed() && !writeBack(player, chain, levels, kind, target, edit, commit)) {
       return false;
     }
-    commit.apply(player, menu, root, edit.carried());
-    return true;
+    return commit.apply(player, menu, root, edit.carried());
   }
 
-  /** The menus of the screens that show pinned windows (inventory, crafting, chests, furnaces). */
+  /**
+   * The menus of the screens that show pinned windows (inventory, crafting, chests, furnaces and
+   * the work stations), subclasses included (Handy Tables' portable stations). A window click only
+   * touches its box's slot, the cursor and player inventory slots, so a station's result slot is
+   * never involved: it refuses items ({@code mayPlace} false), so it can be no window's slot
+   * ({@code allowModification}), and it is not a player inventory slot.
+   */
   public static boolean supports(AbstractContainerMenu menu) {
     return menu instanceof InventoryMenu
         || menu instanceof CraftingMenu
         || menu instanceof ChestMenu
         || menu instanceof ShulkerBoxMenu
-        || menu instanceof AbstractFurnaceMenu;
+        || menu instanceof AbstractFurnaceMenu
+        || menu instanceof StonecutterMenu
+        || menu instanceof LoomMenu
+        || menu instanceof CartographyTableMenu
+        || menu instanceof SmithingMenu
+        || menu instanceof GrindstoneMenu
+        || menu instanceof AnvilMenu;
   }
 
   /** The click on the working copy; side effects outside it are only recorded in {@code commit}. */
@@ -140,10 +157,48 @@ public final class PinnedWindowClicks {
       // The box itself would swap into its own window.
       return false;
     }
-    ItemStack hotbar = edit.swap(slot, inventory.getItem(button));
+    ItemStack outgoing = inventory.getItem(button);
+    ItemStack hotbar = edit.swap(slot, outgoing);
+    Slot hotbarSlot = inventorySlot(player, menu, button);
+    if (hotbar == null || !swapAllowed(player, hotbarSlot, outgoing, hotbar)) {
+      return false;
+    }
     commit.hotbarButton = button;
     commit.hotbarStack = hotbar;
-    return hotbar != null;
+    if (hotbarSlot != null) {
+      commit.hotbarSlot = hotbarSlot;
+      commit.hotbarTaken = outgoing.getCount();
+    }
+    return true;
+  }
+
+  /**
+   * The open menu's slot showing inventory index {@code inventoryIndex}, or null when the menu has
+   * none (the offhand outside the inventory screen). One pass over the menu's slots.
+   */
+  public static @Nullable Slot inventorySlot(
+      Player player, AbstractContainerMenu menu, int inventoryIndex) {
+    Inventory inventory = player.getInventory();
+    for (int index = 0; index < menu.slots.size(); index++) {
+      Slot slot = menu.getSlot(index);
+      if (slot.container == inventory && slot.getContainerSlot() == inventoryIndex) {
+        return slot;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Whether the menu's own rules for {@code slot} let a number-key swap take {@code outgoing} out
+   * of it and put {@code incoming} in ({@code Slot#mayPickup}, {@code Slot#mayPlace}), as vanilla
+   * checks the slot a swap targets. A mod slot can refuse here (a locked slot); without a menu slot
+   * there is nothing to ask. Both sides: the client does not send a refused swap.
+   */
+  public static boolean swapAllowed(
+      Player player, @Nullable Slot slot, ItemStack outgoing, ItemStack incoming) {
+    return slot == null
+        || ((outgoing.isEmpty() || slot.mayPickup(player))
+            && (incoming.isEmpty() || slot.mayPlace(incoming)));
   }
 
   /**
@@ -322,8 +377,24 @@ public final class PinnedWindowClicks {
     private int sourceTaken;
     private int hotbarButton = -1;
     private @Nullable ItemStack hotbarStack;
+    private @Nullable Slot hotbarSlot;
+    private int hotbarTaken;
 
-    void apply(Player player, AbstractContainerMenu menu, Slot root, ItemStack carried) {
+    /**
+     * Applies the click. Takes from inventory slots go first (the shift-click source, the swapped
+     * hotbar slot): a slot may give back less than asked (a mod's slot that keeps part of its
+     * stack, as Handy Tables' locked station slot), and the box already holds the whole amount, so
+     * a short take is undone and the click refused before anything else changes.
+     *
+     * @return false when a slot gave less than the box took (nothing changed)
+     */
+    boolean apply(Player player, AbstractContainerMenu menu, Slot root, ItemStack carried) {
+      if (source != null && sourceTaken > 0 && !take(source, sourceTaken)) {
+        return false;
+      }
+      if (hotbarSlot != null && hotbarTaken > 0 && !take(hotbarSlot, hotbarTaken)) {
+        return false;
+      }
       SimpleContainer enderChest = player.getEnderChestInventory();
       boolean enderChanged = false;
       if (enderSlots != null) {
@@ -345,10 +416,6 @@ public final class PinnedWindowClicks {
       if (toInventory != null && !toInventory.isEmpty()) {
         moveToInventory(player, menu, root, toInventory);
       }
-      if (source != null && sourceTaken > 0) {
-        source.remove(sourceTaken);
-        source.setChanged();
-      }
       if (hotbarStack != null) {
         player.getInventory().setItem(hotbarButton, hotbarStack);
       }
@@ -356,6 +423,17 @@ public final class PinnedWindowClicks {
       if (enderChanged && player instanceof ServerPlayer serverPlayer) {
         EnderChestSync.sendContents(serverPlayer);
       }
+      return true;
+    }
+
+    private static boolean take(Slot from, int count) {
+      ItemStack before = from.getItem().copy();
+      if (from.remove(count).getCount() == count) {
+        from.setChanged();
+        return true;
+      }
+      from.set(before);
+      return false;
     }
   }
 }

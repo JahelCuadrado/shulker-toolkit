@@ -17,6 +17,7 @@ class PinnedLayoutTest {
   private static final int CONTAINER_RIGHT = CONTAINER_LEFT + CHEST_WIDTH;
   private static final int H = PinnedLayout.HIDDEN;
   private static final int INVENTORY_HEIGHT = 166;
+  private static final int HALF_SCALE = 4;
 
   private final int[] x = new int[PinnedPaths.MAX_DEPTH];
   private final int[] y = new int[PinnedPaths.MAX_DEPTH];
@@ -124,8 +125,41 @@ class PinnedLayoutTest {
     assertEquals(y[0] + scaledHeight + PinnedLayout.GAP, y[1]);
   }
 
+  /**
+   * 427 x 240 (854 x 480 at GUI scale 2, a Retina Mac's default window at automatic scale) with the
+   * recipe book open: rows above and below have 33 pixels, too little at half size; 3/8 fits.
+   */
   @Test
-  void belowHalfSizeWindowsStayHidden() {
+  void recipeBookAtGuiHeight240FitsAtThreeEighths() {
+    int left = 202;
+    int top = (240 - INVENTORY_HEIGHT) / 2;
+    int[] widths = new int[PinnedPaths.MAX_DEPTH];
+    java.util.Arrays.fill(widths, CHEST_WIDTH);
+    int scale =
+        PinnedLayout.placeScaled(
+            427,
+            240,
+            left,
+            top,
+            left + CHEST_WIDTH,
+            top + INVENTORY_HEIGHT,
+            false,
+            true,
+            1,
+            widths,
+            sixChests(),
+            new int[PinnedPaths.MAX_DEPTH],
+            new int[PinnedPaths.MAX_DEPTH],
+            x,
+            y);
+    assertEquals(PinnedLayout.MIN_SCALE, scale);
+    assertTrue(x[0] != H, "the window is placed");
+    assertEquals(top - PinnedLayout.GAP - PinnedLayout.scaled(CHEST_HEIGHT, scale), y[0]);
+    assertTrue(y[0] >= PinnedLayout.MARGIN, "inside the screen");
+  }
+
+  @Test
+  void belowTheSmallestScaleWindowsStayHidden() {
     int[] heights = {CHEST_HEIGHT, CHEST_HEIGHT, CHEST_HEIGHT};
     assertEquals(PinnedLayout.MIN_SCALE, placeScaled(CHEST_WIDTH + 100, 270, 3, heights));
     assertPrefix(new int[] {H, H, H}, x);
@@ -220,8 +254,8 @@ class PinnedLayoutTest {
     int left = (480 - CHEST_WIDTH) / 2;
     int top = (270 - INVENTORY_HEIGHT) / 2;
     for (int count = 4; count <= 6; count++) {
-      assertEquals(PinnedLayout.MIN_SCALE, placeRows(480, 270, left, count), count + " windows");
-      int height = PinnedLayout.scaled(CHEST_HEIGHT, PinnedLayout.MIN_SCALE);
+      assertEquals(HALF_SCALE, placeRows(480, 270, left, count), count + " windows");
+      int height = PinnedLayout.scaled(CHEST_HEIGHT, HALF_SCALE);
       assertEquals(top - PinnedLayout.GAP - height, y[0]);
       assertEquals(top + INVENTORY_HEIGHT + PinnedLayout.GAP, y[3]);
       for (int window = 0; window < count; window++) {

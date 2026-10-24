@@ -19,10 +19,12 @@ Fabric mod for Minecraft 26.3.
 - **Know at a glance:** box icons show a fill bar, and a green **+** when the box already holds the
   item you carry and has room for more.
 - **Middle-click windows:** middle-click a shulker box, a bundle or your ender chest to open its
-  window next to your inventory, a crafting table, a chest or a furnace, and use it like a chest.
-  Open up to 6 at once, beside the screen or above and below the recipe book, each with its own
-  opening sound. An eye marks the boxes that are open. In creative, hold `Ctrl` while
-  middle-clicking.
+  window next to your inventory, a crafting table, a chest, a furnace or a work station
+  (stonecutter, loom, cartography table, smithing table, grindstone, anvil), and use it like a
+  chest. Open up to 6 at once, beside the screen or above and below the recipe book, each with its
+  own opening sound; on small screens they shrink to fit. They stay open when you go straight from
+  one of these screens to another (for example between work stations with Handy Tables). An eye
+  marks the boxes that are open. In creative, hold `Ctrl` while middle-clicking.
 - **Craft from your boxes:** the recipe book counts the materials inside your shulker boxes and
   takes them out for you. Four depth levels: the boxes in your inventory, then your ender chest,
   the boxes inside it and the bundles inside those boxes.
