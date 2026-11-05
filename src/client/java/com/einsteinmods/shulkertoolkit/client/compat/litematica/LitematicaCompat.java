@@ -26,8 +26,7 @@ public final class LitematicaCompat {
   /** The one warning shown when {@code feature} is off because the installed version differs. */
   static void warnUnsupported(String feature, String reason) {
     LOGGER.warn(
-        "Shulker Toolkit: {} cannot take blocks out of shulker boxes with this Litematica version ({}); "
-            + "the rest of the mod works.",
+        "Shulker Toolkit: {} is off with this Litematica version ({}); the rest of the mod works.",
         feature,
         reason);
   }

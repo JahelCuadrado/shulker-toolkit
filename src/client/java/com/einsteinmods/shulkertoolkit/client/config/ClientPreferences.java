@@ -23,6 +23,8 @@ import com.einsteinmods.shulkertoolkit.core.PlayerPreferences;
  * @param nestedItemTooltips open a container item inside a tooltip with Enter or Space
  * @param bundleInteractions bundles get the same tooltip and controls as shulker boxes instead of
  *     vanilla's (off by default, as Easy Shulker Boxes outside development); reaches the server
+ * @param enderChestInteractions the ender chest item gets the same tooltip and controls as shulker
+ *     boxes instead of vanilla's (off by default); reaches the server
  * @param pickMode how much pick-block takes out of a shulker box (server-backed)
  * @param autoRefill refill the held stack from shulker boxes (server-backed)
  * @param litematicaAutoTakeOut with Litematica, right-clicking a schematic block takes the block it
@@ -39,8 +41,7 @@ import com.einsteinmods.shulkertoolkit.core.PlayerPreferences;
  * @param pinnedWindowSounds pinning a window plays its container's opening sound
  * @param maxPinnedWindows how many windows may be pinned at once ({@link #MIN_PINNED_WINDOWS} to
  *     {@link #MAX_PINNED_WINDOWS})
- * @param pinnedWindowsAlwaysRight windows always go in columns beside the container, never in rows
- *     above and below it
+ * @param showEmptyBoxes an empty shulker box or ender chest still shows its (empty) grid
  */
 public record ClientPreferences(
     ShowMode itemStorageTooltip,
@@ -53,6 +54,7 @@ public record ClientPreferences(
     ClickScheme controlScheme,
     boolean nestedItemTooltips,
     boolean bundleInteractions,
+    boolean enderChestInteractions,
     PickMode pickMode,
     boolean autoRefill,
     boolean litematicaAutoTakeOut,
@@ -63,7 +65,7 @@ public record ClientPreferences(
     boolean pinnedWindows,
     boolean pinnedWindowSounds,
     int maxPinnedWindows,
-    boolean pinnedWindowsAlwaysRight) {
+    boolean showEmptyBoxes) {
   public static final int MIN_PINNED_WINDOWS = 1;
   public static final int MAX_PINNED_WINDOWS = PinnedPaths.MAX_DEPTH;
   public static final int DEFAULT_MAX_PINNED_WINDOWS = 3;
@@ -79,6 +81,7 @@ public record ClientPreferences(
           ShowMode.ALT,
           ClickScheme.DEFAULT,
           true,
+          false,
           false,
           PlayerPreferences.DEFAULTS.pickMode(),
           PlayerPreferences.DEFAULTS.autoRefill(),
@@ -104,6 +107,7 @@ public record ClientPreferences(
         controlScheme,
         nestedItemTooltips,
         bundleInteractions,
+        enderChestInteractions,
         newPickMode,
         autoRefill,
         litematicaAutoTakeOut,
@@ -114,7 +118,7 @@ public record ClientPreferences(
         pinnedWindows,
         pinnedWindowSounds,
         maxPinnedWindows,
-        pinnedWindowsAlwaysRight);
+        showEmptyBoxes);
   }
 
   public ClientPreferences withAutoRefill(boolean newAutoRefill) {
@@ -129,6 +133,7 @@ public record ClientPreferences(
         controlScheme,
         nestedItemTooltips,
         bundleInteractions,
+        enderChestInteractions,
         pickMode,
         newAutoRefill,
         litematicaAutoTakeOut,
@@ -139,7 +144,33 @@ public record ClientPreferences(
         pinnedWindows,
         pinnedWindowSounds,
         maxPinnedWindows,
-        pinnedWindowsAlwaysRight);
+        showEmptyBoxes);
+  }
+
+  public ClientPreferences withShowEmptyBoxes(boolean newShowEmptyBoxes) {
+    return new ClientPreferences(
+        itemStorageTooltip,
+        itemStorageColors,
+        itemStorageHighlightSprite,
+        verticalTooltipScrolling,
+        iconMarker,
+        singleItemMovement,
+        itemHeldByCursorTooltip,
+        controlScheme,
+        nestedItemTooltips,
+        bundleInteractions,
+        enderChestInteractions,
+        pickMode,
+        autoRefill,
+        litematicaAutoTakeOut,
+        pickupOverflowToBoxes,
+        pickupDirectToBox,
+        craftFromBoxes,
+        craftDepth,
+        pinnedWindows,
+        pinnedWindowSounds,
+        maxPinnedWindows,
+        newShowEmptyBoxes);
   }
 
   public PlayerPreferences toPlayer() {
@@ -147,6 +178,7 @@ public record ClientPreferences(
         pickMode,
         autoRefill,
         bundleInteractions,
+        enderChestInteractions,
         pickupOverflowToBoxes,
         pickupDirectToBox,
         craftFromBoxes,

@@ -3,11 +3,10 @@ package com.einsteinmods.shulkertoolkit.core;
 /**
  * Where pinned windows go around a container screen. Columns ({@link #place}): up to {@link
  * #ROW_WINDOWS} to the right of the container, top-aligned with it and filled downwards, then up to
- * as many to its left (when allowed; otherwise, or once both are full, further columns outwards).
- * Rows ({@link #placeRows}): up to {@link #ROW_WINDOWS} side by side above the container, the next
- * ones below it, each row centred on the screen. A window that fits nowhere is {@link #HIDDEN}.
- * Pure and allocation-free; runs when a window is pinned or resized or the screen changes, never
- * per frame in steady state.
+ * as many to its left (once both are full, further columns outwards). Rows ({@link #placeRows}): up
+ * to {@link #ROW_WINDOWS} side by side above the container, the next ones below it, each row
+ * centred on the screen. A window that fits nowhere is {@link #HIDDEN}. Pure and allocation-free;
+ * runs when a window is pinned or resized or the screen changes, never per frame in steady state.
  */
 public final class PinnedLayout {
   /** Position of a window that does not fit on the screen. */
@@ -55,7 +54,6 @@ public final class PinnedLayout {
       int containerTop,
       int containerRight,
       int containerBottom,
-      boolean leftAllowed,
       boolean rows,
       int count,
       int[] widths,
@@ -87,7 +85,6 @@ public final class PinnedLayout {
             containerLeft,
             containerTop,
             containerRight,
-            leftAllowed,
             count,
             scaledWidths,
             scaledHeights,
@@ -157,8 +154,6 @@ public final class PinnedLayout {
   /**
    * Places {@code count} windows of {@code widths} x {@code heights}, writing their top left
    * corners to {@code outX} and {@code outY} ({@link #HIDDEN} for both when one does not fit).
-   *
-   * @param leftAllowed false while something else uses the left of the container (the recipe book)
    */
   public static void place(
       int screenWidth,
@@ -166,7 +161,6 @@ public final class PinnedLayout {
       int containerLeft,
       int containerTop,
       int containerRight,
-      boolean leftAllowed,
       int count,
       int[] widths,
       int[] heights,
@@ -191,7 +185,7 @@ public final class PinnedLayout {
       while (true) {
         if (inColumn > 0 && (inColumn == ROW_WINDOWS || y + height > bottom)) {
           // A full column: the left side next, or another column further out.
-          if (right && leftAllowed) {
+          if (right) {
             right = false;
             edge = containerLeft - GAP;
           } else {
@@ -210,7 +204,7 @@ public final class PinnedLayout {
           inColumn++;
           break;
         }
-        if (!right || !leftAllowed) {
+        if (!right) {
           break;
         }
         right = false;

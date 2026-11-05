@@ -1,5 +1,6 @@
 package com.einsteinmods.shulkertoolkit.pick;
 
+import com.einsteinmods.shulkertoolkit.core.CraftScope;
 import com.einsteinmods.shulkertoolkit.core.PickMode;
 import com.einsteinmods.shulkertoolkit.core.PickPlanner;
 import com.einsteinmods.shulkertoolkit.core.PlayerPreferences;
@@ -14,15 +15,20 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Prediction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Takes items out of the shulker boxes in a player's hotbar and main inventory (slots 0-35, in slot
- * order): pick block when the item is in no loose stack, and auto refill when the held stack runs
- * out. Server thread only. Cost only on a pick or when a held stack runs out: at most 36 slots × 27
- * box slots read, no stack created per slot.
+ * Takes items out of a player's containers: pick block when the item is in no loose stack, from
+ * where the player's depth level reaches ({@link DepthStorage}: at least the shulker boxes and
+ * bundles in slots 0-35), and auto refill when the held stack runs out, from the shulker boxes in
+ * slots 0-35 only. Server thread only. Cost only on a pick, a take-out request or when a held stack
+ * runs out: a bounded read of those containers (at most 1,791 sources at level 3), no stack created
+ * per slot. Searching for an item no container holds (the longest search) measured 0.8 / 5.2 / 8.0
+ * µs at levels 1-3 with 9 full boxes and 27 loose ender chest stacks, and 1.0 / 14.4 / 36.4 µs with
+ * 4,860 stacks in bundles in boxes (2026-11-04, dev-only harness, M-series Mac).
  */
 public final class ShulkerPick {
   /** Finding one matching item is enough to know a box holds it. */
@@ -34,7 +40,7 @@ public final class ShulkerPick {
   public enum Status {
     /** Items moved to the hotbar slot, which is now selected. */
     TAKEN,
-    /** No shulker box in the inventory holds the item; nothing changed. */
+    /** No container the depth level reads holds the item; nothing changed. */
     NOT_IN_ANY_BOX,
     /** The hotbar is full and so is the inventory; nothing changed, so nothing is lost. */
     NO_ROOM,
@@ -46,8 +52,8 @@ public final class ShulkerPick {
    * What {@link #takeOut} did.
    *
    * @param status the outcome
-   * @param boxSlot inventory slot of the box taken from, after the move, or {@link
-   *     PickPlanner#NO_SLOT}
+   * @param boxSlot inventory slot of the container taken from (or of the box holding it), after the
+   *     move, or {@link PickPlanner#NO_SLOT} (nothing taken, or taken from the ender chest)
    * @param hotbarSlot hotbar slot now holding the items, or {@link PickPlanner#NO_SLOT}
    * @param amount items taken; 0 unless {@link Status#TAKEN}
    */
@@ -77,15 +83,22 @@ public final class ShulkerPick {
   }
 
   /**
-   * Pulls {@code picked} out of a shulker box when {@code policy} allows picks, in the player's
-   * {@link PickMode}. Creative (infinite materials) stays vanilla.
+   * Pulls {@code picked} out of a container when {@code policy} allows picks, in the player's
+   * {@link PickMode} and depth. Creative (infinite materials) stays vanilla.
    */
   public static TakeOutResult pickIfAllowed(
       ServerPlayer player, ItemStack picked, ServerPolicy policy, PlayerPreferences preferences) {
-    if (player.hasInfiniteMaterials() || !policy.allowPick()) {
+    CraftScope scope = scope(policy, preferences);
+    if (player.hasInfiniteMaterials() || scope == null) {
       return TakeOutResult.NOT_IN_ANY_BOX;
     }
-    return takeOut(player, picked, preferences.pickMode());
+    return takeOut(player, picked, preferences.pickMode(), scope);
+  }
+
+  /** Where picks and take-out requests look, or null when the server forbids picks. */
+  public static @Nullable CraftScope scope(ServerPolicy policy, PlayerPreferences preferences) {
+    return CraftScope.resolve(
+        policy.allowPick(), true, preferences.craftDepth(), policy.allowEnderPreview());
   }
 
   /**
@@ -113,33 +126,37 @@ public final class ShulkerPick {
   }
 
   /**
-   * Whether a shulker box among {@code items} holds {@code wanted} (same item and components, as
+   * Whether a container {@code scope} reads holds {@code wanted} (same item and components, as
    * {@link #takeOut} matches). Read-only, so the client can check before sending a request.
    */
-  public static boolean anyBoxHolds(NonNullList<ItemStack> items, ItemStack wanted) {
+  public static boolean anyBoxHolds(Player player, CraftScope scope, ItemStack wanted) {
     return !wanted.isEmpty()
-        && PickPlanner.findExtraction(new InventoryBoxes(items, WantedItem.of(wanted)), ONE_ITEM)
+        && PickPlanner.findExtraction(
+                new StoredMatches(new DepthStorage(player, scope), WantedItem.of(wanted)), ONE_ITEM)
             != null;
   }
 
   /**
-   * Moves {@code wanted} (one item, or up to a full stack) from the first shulker box holding it
-   * into a hotbar slot and selects it, placed the way vanilla {@code Inventory#addAndPickItem}
-   * picks: the {@code Inventory#getSuitableHotbarSlot} slot, its previous stack moved to a free
-   * slot; refused when there is none, so no item is ever lost or duplicated. No policy or game mode
-   * checks: callers decide. The caller syncs the client as vanilla {@code tryPickItem} does
-   * (selected-slot packet, then {@code inventoryMenu.broadcastChanges()}).
+   * Moves {@code wanted} (one item, or up to a full stack) from the first container {@code scope}
+   * reads that holds it ({@link DepthStorage} order) into a hotbar slot and selects it, placed the
+   * way vanilla {@code Inventory#addAndPickItem} picks: the {@code Inventory#getSuitableHotbarSlot}
+   * slot, its previous stack moved to a free slot; refused when there is none, so no item is ever
+   * lost or duplicated. No policy or game mode checks: callers decide. The caller syncs the client
+   * as vanilla {@code tryPickItem} does (selected-slot packet, then {@code
+   * inventoryMenu.broadcastChanges()}).
    */
-  public static TakeOutResult takeOut(ServerPlayer player, ItemStack wanted, PickMode mode) {
+  public static TakeOutResult takeOut(
+      ServerPlayer player, ItemStack wanted, PickMode mode, CraftScope scope) {
     if (wanted.isEmpty()) {
       return TakeOutResult.NOT_IN_ANY_BOX;
     }
     WantedItem item = WantedItem.of(wanted);
     Inventory inventory = player.getInventory();
     NonNullList<ItemStack> items = inventory.getNonEquipmentItems();
+    DepthStorage storage = new DepthStorage(player, scope);
     PickPlanner.Extraction extraction =
         PickPlanner.findExtraction(
-            new InventoryBoxes(items, item), PickPlanner.wantedAmount(mode, item.maxStackSize()));
+            new StoredMatches(storage, item), PickPlanner.wantedAmount(mode, item.maxStackSize()));
     if (extraction == null) {
       return TakeOutResult.NOT_IN_ANY_BOX;
     }
@@ -149,8 +166,12 @@ public final class ShulkerPick {
     if (placement == null) {
       return TakeOutResult.NO_ROOM;
     }
-    int boxSlot = extraction.inventorySlot();
-    ItemStack taken = BoxContents.take(items.get(boxSlot), item, extraction.amount());
+    // Taken before any stack moves: the source is found by its slot.
+    ItemStack taken = storage.take(extraction.source(), item, extraction.amount());
+    if (taken.isEmpty()) {
+      return TakeOutResult.NOT_IN_ANY_BOX;
+    }
+    int boxSlot = storage.inventorySlot(extraction.source());
     if (placement.displacedTo() != PickPlanner.NO_SLOT) {
       items.set(placement.displacedTo(), items.get(target));
       if (boxSlot == target) {
@@ -240,8 +261,7 @@ public final class ShulkerPick {
       return false;
     }
     ItemStack remainder = player.getItemInHand(hand);
-    ItemStack taken =
-        BoxContents.take(items.get(extraction.inventorySlot()), item, extraction.amount());
+    ItemStack taken = BoxContents.take(items.get(extraction.source()), item, extraction.amount());
     player.setItemInHand(hand, taken);
     if (!remainder.isEmpty()) {
       player.getInventory().placeItemBackInInventory(remainder, Prediction.SERVER_ONLY);
@@ -250,7 +270,29 @@ public final class ShulkerPick {
     return true;
   }
 
-  /** The inventory's shulker boxes as the planner reads them; caches the box being read. */
+  /** What the depth level reaches as the planner reads it, matched against one item. */
+  private record StoredMatches(DepthStorage storage, WantedItem wanted)
+      implements PickPlanner.BoxView {
+    @Override
+    public int sources() {
+      return storage.sources();
+    }
+
+    @Override
+    public int slots(int source) {
+      return storage.entries(source);
+    }
+
+    @Override
+    public int matchingCount(int source, int slot) {
+      return storage.matchingCount(source, slot, wanted);
+    }
+  }
+
+  /**
+   * The inventory's shulker boxes as the planner reads them, for auto refill (sources are inventory
+   * slots); caches the box being read.
+   */
   private static final class InventoryBoxes implements PickPlanner.BoxView {
     private final NonNullList<ItemStack> items;
     private final WantedItem wanted;
@@ -263,12 +305,12 @@ public final class ShulkerPick {
     }
 
     @Override
-    public int inventorySlots() {
+    public int sources() {
       return items.size();
     }
 
     @Override
-    public int boxSlots(int inventorySlot) {
+    public int slots(int inventorySlot) {
       List<Optional<ItemStackTemplate>> box = read(inventorySlot);
       return box == null ? 0 : box.size();
     }

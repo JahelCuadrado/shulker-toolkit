@@ -97,11 +97,24 @@ class PayloadCodecTest {
   }
 
   @Test
+  void playerPreferencesKeepEnderChestInteractions() {
+    PlayerPreferences preferences =
+        new PlayerPreferences(
+            PickMode.DEFAULT, true, false, true, false, false, false, CraftDepth.DEFAULT);
+
+    assertEquals(
+        preferences,
+        roundTrip(PlayerPreferencesPayload.CODEC, new PlayerPreferencesPayload(preferences))
+            .preferences());
+  }
+
+  @Test
   void unknownPickModeAndCraftDepthIdsDecodeAsDefault() {
     RegistryFriendlyByteBuf buffer = buffer();
     buffer.writeByte(UNKNOWN_PICK_MODE_ID);
     buffer.writeBoolean(true);
     buffer.writeBoolean(true);
+    buffer.writeBoolean(false);
     buffer.writeBoolean(false);
     buffer.writeBoolean(false);
     buffer.writeBoolean(true);

@@ -3,9 +3,9 @@ package com.einsteinmods.shulkertoolkit.core;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Decides what taking an item out of the shulker boxes in an inventory does, independent of
- * Minecraft types: which box, how many items, and where the item already in the target hotbar slot
- * goes. Runs only on a pick or when a held stack runs out, never per tick.
+ * Decides what taking an item out of a player's containers does, independent of Minecraft types:
+ * which container, how many items, and where the item already in the target hotbar slot goes. Runs
+ * only on a pick or when a held stack runs out, never per tick.
  */
 public final class PickPlanner {
   /** No slot: nothing found, or nothing to move. */
@@ -15,23 +15,26 @@ public final class PickPlanner {
 
   private PickPlanner() {}
 
-  /** The inventory as the planner reads it: matching items per slot of each shulker box. */
+  /**
+   * The containers as the planner reads them: matching items per slot of each source (a container,
+   * such as the shulker box in an inventory slot).
+   */
   public interface BoxView {
-    /** Inventory slots searched, in search order (vanilla slot order). */
-    int inventorySlots();
+    /** Sources searched, in search order. */
+    int sources();
 
-    /** Slots of the shulker box held in {@code inventorySlot}; 0 when it holds no box. */
-    int boxSlots(int inventorySlot);
+    /** Slots of {@code source}; 0 when it holds no usable container. */
+    int slots(int source);
 
-    /** Items in {@code boxSlot} of that box matching the wanted item; 0 when none. */
-    int matchingCount(int inventorySlot, int boxSlot);
+    /** Items in {@code slot} of that source matching the wanted item; 0 when none. */
+    int matchingCount(int source, int slot);
   }
 
   /**
-   * Take {@code amount} matching items out of the box in {@code inventorySlot}, draining its
-   * matching slots in slot order.
+   * Take {@code amount} matching items out of {@code source}, draining its matching slots in slot
+   * order.
    */
-  public record Extraction(int inventorySlot, int amount) {}
+  public record Extraction(int source, int amount) {}
 
   /**
    * Where the picked stack goes.
@@ -48,21 +51,22 @@ public final class PickPlanner {
   }
 
   /**
-   * The first box (in inventory order) with any matching item, and up to {@code wanted} of its
-   * matching items; only that box is used, even if it holds fewer. Null when no box matches.
+   * The first source (in search order) with any matching item, and up to {@code wanted} of its
+   * matching items; only that source is used, even if it holds fewer. Null when none matches.
    */
   public static @Nullable Extraction findExtraction(BoxView view, int wanted) {
     if (wanted <= 0) {
       return null;
     }
-    for (int inventorySlot = 0; inventorySlot < view.inventorySlots(); inventorySlot++) {
-      int boxSlots = view.boxSlots(inventorySlot);
+    int sources = view.sources();
+    for (int source = 0; source < sources; source++) {
+      int slots = view.slots(source);
       int found = 0;
-      for (int boxSlot = 0; boxSlot < boxSlots && found < wanted; boxSlot++) {
-        found += view.matchingCount(inventorySlot, boxSlot);
+      for (int slot = 0; slot < slots && found < wanted; slot++) {
+        found += view.matchingCount(source, slot);
       }
       if (found > 0) {
-        return new Extraction(inventorySlot, Math.min(found, wanted));
+        return new Extraction(source, Math.min(found, wanted));
       }
     }
     return null;

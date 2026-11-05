@@ -46,6 +46,9 @@ public final class StorageTooltips {
   /** Bundle panel colour: the leather of vanilla's {@code textures/item/bundle.png}. */
   private static final int BUNDLE_LEATHER_COLOR = ARGB.opaque(0xCD7B46);
 
+  /** Undyed shulker box panel colour: the body of vanilla's {@code block/shulker_box.png}. */
+  private static final int UNDYED_SHULKER_COLOR = ARGB.opaque(0x976997);
+
   private static final int NO_TINT = -1;
 
   /** Entries per kind: hovered stack, cursor stack and a nested one fit without eviction. */
@@ -66,19 +69,26 @@ public final class StorageTooltips {
   private record ShulkerEntry(
       ItemContainerContents contents, List<ItemStack> items, ContainerTooltip tooltip) {}
 
-  /** The contents tooltip of {@code stack}, or null to keep vanilla's. */
+  /**
+   * The contents tooltip of {@code stack}, or null to keep vanilla's. An empty shulker box or ender
+   * chest shows its empty grid only with the show empty boxes option; an empty bundle never does.
+   * The option is read on every call, so toggling it applies at once (no cache to invalidate: the
+   * empty grid is cached like any other contents).
+   */
   public static @Nullable CollapsibleTooltip imageFor(ItemStack stack) {
     StorageKind kind = StorageKind.of(stack);
-    if (kind == null
-        || (kind == StorageKind.BUNDLE && !StorageInput.preferences().bundleInteractions())) {
+    if (kind == null || !shownByOption(kind, StorageInput.preferences())) {
       return null;
     }
     Minecraft minecraft = Minecraft.getInstance();
     LocalPlayer player = minecraft.player;
-    if (player == null || !minecraft.isSameThread() || !kind.hasContents(stack, player)) {
+    if (player == null || !minecraft.isSameThread()) {
       return null;
     }
     ClientPreferences preferences = StorageInput.preferences();
+    if (!kind.hasContents(stack, player) && !showsEmpty(kind, stack, preferences)) {
+      return null;
+    }
     int selected = StorageStates.of(player).selectedItem();
     if (kind == StorageKind.SHULKER_BOX) {
       return shulkerImage(stack, preferences, selected);
@@ -86,6 +96,27 @@ public final class StorageTooltips {
     return kind == StorageKind.ENDER_CHEST
         ? enderImage(player.getEnderChestInventory(), preferences, selected)
         : bundleImage(stack);
+  }
+
+  /**
+   * Bundles and the ender chest keep vanilla's tooltip unless their option is on; the ender chest
+   * also while its own menu shows the same contents.
+   */
+  private static boolean shownByOption(StorageKind kind, ClientPreferences preferences) {
+    if (kind == StorageKind.BUNDLE) {
+      return preferences.bundleInteractions();
+    }
+    return kind != StorageKind.ENDER_CHEST
+        || (preferences.enderChestInteractions() && !EnderMenuScreen.isOpen());
+  }
+
+  /**
+   * Whether an empty {@code stack} shows its empty grid: a single shulker box or any number of
+   * ender chests, never a bundle (vanilla's).
+   */
+  private static boolean showsEmpty(
+      StorageKind kind, ItemStack stack, ClientPreferences preferences) {
+    return preferences.showEmptyBoxes() && kind != StorageKind.BUNDLE && kind.viewable(stack);
   }
 
   /**
@@ -203,12 +234,12 @@ public final class StorageTooltips {
     return ENDER_STARFIELD && color == ENDER_CHEST_COLOR;
   }
 
-  /** Dyed boxes take their dye's colour; the undyed box is not tinted, as Easy Shulker Boxes. */
+  /** Dyed boxes take their dye's colour; the undyed box its own purple. */
   private static int shulkerColor(ItemStack stack) {
     if (stack.getItem() instanceof BlockItem blockItem
         && blockItem.getBlock() instanceof ShulkerBoxBlock shulkerBox) {
       DyeColor dye = shulkerBox.getColor();
-      return dye == null ? NO_TINT : ARGB.opaque(dye.getTextureDiffuseColor());
+      return dye == null ? UNDYED_SHULKER_COLOR : ARGB.opaque(dye.getTextureDiffuseColor());
     }
     return NO_TINT;
   }

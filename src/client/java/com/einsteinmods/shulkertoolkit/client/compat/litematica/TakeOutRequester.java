@@ -1,6 +1,7 @@
 package com.einsteinmods.shulkertoolkit.client.compat.litematica;
 
 import com.einsteinmods.shulkertoolkit.client.ClientShulkerState;
+import com.einsteinmods.shulkertoolkit.core.CraftScope;
 import com.einsteinmods.shulkertoolkit.core.PickPlanner;
 import com.einsteinmods.shulkertoolkit.network.TakeOutPayload;
 import com.einsteinmods.shulkertoolkit.pick.ShulkerPick;
@@ -12,10 +13,11 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * Asks the server ({@link TakeOutPayload}) to take an item a schematic tool needs out of a shulker
- * box in the inventory. The server applies it like a pick block and syncs the hotbar, so the tool's
- * next attempt (next tick for Easy Place held down and the printer, next click otherwise) finds the
- * item loose and places it. Client thread only.
+ * Asks the server ({@link TakeOutPayload}) to take an item a schematic tool needs out of a
+ * container the player's depth level reaches ({@code ClientShulkerState#pickScope}). The server
+ * applies it like a pick block and syncs the hotbar, so the tool's next attempt (next tick for Easy
+ * Place held down and the printer, next click otherwise) finds the item loose and places it. Client
+ * thread only.
  *
  * <p>Cost, paid only when a tool needs an item that is not loose: one {@code
  * Inventory#findSlotMatchingItem} (36 slots); while a request is unanswered, one more for the
@@ -54,7 +56,8 @@ final class TakeOutRequester {
    *     pick forbidden, creative, already loose, or in no box)
    */
   boolean request(LocalPlayer player, ItemStack wanted) {
-    if (wanted.isEmpty() || !state.pickAllowed() || player.hasInfiniteMaterials()) {
+    CraftScope scope = state.pickScope();
+    if (wanted.isEmpty() || scope == null || player.hasInfiniteMaterials()) {
       return false;
     }
     Inventory inventory = player.getInventory();
@@ -79,7 +82,7 @@ final class TakeOutRequester {
     if (notInAnyBox.contains(item)) {
       return false;
     }
-    if (!ShulkerPick.anyBoxHolds(inventory.getNonEquipmentItems(), wanted)) {
+    if (!ShulkerPick.anyBoxHolds(player, scope, wanted)) {
       notInAnyBox.add(item);
       return false;
     }

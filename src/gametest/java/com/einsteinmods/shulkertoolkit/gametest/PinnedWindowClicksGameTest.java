@@ -1,5 +1,7 @@
 package com.einsteinmods.shulkertoolkit.gametest;
 
+import com.einsteinmods.shulkertoolkit.core.CraftDepth;
+import com.einsteinmods.shulkertoolkit.core.PickMode;
 import com.einsteinmods.shulkertoolkit.core.PinnedAction;
 import com.einsteinmods.shulkertoolkit.core.PlayerPreferences;
 import com.einsteinmods.shulkertoolkit.core.ServerPolicy;
@@ -52,6 +54,9 @@ public final class PinnedWindowClicksGameTest {
   private static final int STONE_COUNT = 20;
   private static final int TABLE_COUNT = 3;
   private static final int NO_SLOT = -1;
+  private static final PlayerPreferences BUNDLE_INTERACTIONS_ON =
+      new PlayerPreferences(
+          PickMode.DEFAULT, true, true, false, false, false, true, CraftDepth.DEFAULT);
   private static final ServerPolicy PINNING_FORBIDDEN =
       new ServerPolicy(true, true, true, true, true, true, true, true, false);
 
@@ -82,6 +87,89 @@ public final class PinnedWindowClicksGameTest {
     helper.assertTrue(
         ShulkerFixtures.countInBox(box(player), Items.DIRT) == DIRT_COUNT - DIRT_HALF + 1,
         "7 in the box");
+    helper.succeed();
+  }
+
+  /** As on a menu slot: a right click takes out of the bundle, and puts the cursor stack in. */
+  @GameTest
+  public void rightClickOnABundleInTheWindowWorksOnItsContents(GameTestHelper helper) {
+    ItemStack bundle = new ItemStack(Items.BUNDLE);
+    bundle.set(
+        DataComponents.BUNDLE_CONTENTS,
+        new BundleContents(
+            List.of(ItemStackTemplate.fromNonEmptyStack(new ItemStack(Items.STONE, STONE_COUNT)))));
+    ServerPlayer player = ShulkerFixtures.player(helper, GameType.SURVIVAL, BUNDLE_INTERACTIONS_ON);
+    openChest(player);
+    player.getInventory().setItem(BOX_INVENTORY_SLOT, ShulkerFixtures.box(bundle));
+
+    click(player, PinnedAction.PICKUP, FIRST_SLOT, PinnedAction.SECONDARY_BUTTON);
+
+    helper.assertTrue(
+        player.containerMenu.getCarried().getCount() == STONE_COUNT, "the stone comes out");
+    ItemStack stored = slotsOf(box(player)).get(FIRST_SLOT);
+    helper.assertTrue(stored.is(Items.BUNDLE), "the bundle stays in the box");
+    BundleContents emptied = stored.get(DataComponents.BUNDLE_CONTENTS);
+    helper.assertTrue(emptied != null && emptied.isEmpty(), "empty");
+
+    click(player, PinnedAction.PICKUP, FIRST_SLOT, PinnedAction.SECONDARY_BUTTON);
+
+    helper.assertTrue(player.containerMenu.getCarried().isEmpty(), "and the stone goes back in");
+    BundleContents refilled =
+        slotsOf(box(player)).get(FIRST_SLOT).get(DataComponents.BUNDLE_CONTENTS);
+    helper.assertTrue(
+        refilled != null && refilled.items().getFirst().count() == STONE_COUNT, "all of it");
+    helper.succeed();
+  }
+
+  /** A held container item decides, so the box in the window does not take it in. */
+  @GameTest
+  public void heldEnderChestDoesNotGoIntoABoxInTheWindow(GameTestHelper helper) {
+    ServerPlayer player = ShulkerFixtures.player(helper, GameType.SURVIVAL, BUNDLE_INTERACTIONS_ON);
+    openChest(player);
+    player
+        .getInventory()
+        .setItem(
+            BOX_INVENTORY_SLOT,
+            ShulkerFixtures.box(ShulkerFixtures.box(new ItemStack(Items.DIRT, DIRT_COUNT))));
+    player.containerMenu.setCarried(new ItemStack(Items.ENDER_CHEST));
+
+    click(player, PinnedAction.PICKUP, FIRST_SLOT, PinnedAction.SECONDARY_BUTTON);
+
+    ItemStack inner = slotsOf(box(player)).get(FIRST_SLOT);
+    helper.assertFalse(
+        inner.is(Items.SHULKER_BOX) && ShulkerFixtures.countInBox(inner, Items.ENDER_CHEST) > 0,
+        "the ender chest is not inside the inner box");
+    helper.succeed();
+  }
+
+  /** The wheel chose the second stack inside the inner box: that one comes out. */
+  @GameTest
+  public void rightClickInsideTakesTheSelectedStack(GameTestHelper helper) {
+    ItemStack inner =
+        ShulkerFixtures.box(
+            new ItemStack(Items.DIRT, DIRT_COUNT), new ItemStack(Items.STONE, STONE_COUNT));
+    ServerPlayer player = ShulkerFixtures.player(helper, GameType.SURVIVAL, BUNDLE_INTERACTIONS_ON);
+    openChest(player);
+    player.getInventory().setItem(BOX_INVENTORY_SLOT, ShulkerFixtures.box(inner));
+
+    PinnedWindowClicks.apply(
+        player,
+        new PinnedWindowClickPayload(
+            CONTAINER_ID,
+            List.of(new PinnedWindowClickPayload.Level(BOX_MENU_SLOT, Items.SHULKER_BOX)),
+            PinnedAction.PICKUP,
+            FIRST_SLOT,
+            PinnedAction.SECONDARY_BUTTON,
+            SECOND_SLOT),
+        ServerPolicy.UNRESTRICTED);
+
+    helper.assertTrue(
+        player.containerMenu.getCarried().getCount() == STONE_COUNT
+            && player.containerMenu.getCarried().is(Items.STONE),
+        "the selected stone comes out, not the dirt");
+    helper.assertTrue(
+        ShulkerFixtures.countInBox(slotsOf(box(player)).get(FIRST_SLOT), Items.DIRT) == DIRT_COUNT,
+        "the dirt stays inside");
     helper.succeed();
   }
 

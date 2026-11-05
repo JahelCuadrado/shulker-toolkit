@@ -96,6 +96,7 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
   private final ClientShulkerState state;
   private final CyclingControl<ShowMode> itemStorageTooltip;
   private final TickBoxControl itemStorageColors;
+  private final TickBoxControl showEmptyBoxes;
   private final CyclingControl<SlotHighlight> itemStorageHighlightSprite;
   private final CyclingControl<ModifierKey> verticalTooltipScrolling;
   private final CyclingControl<IconMarker> iconMarker;
@@ -104,6 +105,7 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
   private final CyclingControl<ClickScheme> controlScheme;
   private final TickBoxControl nestedItemTooltips;
   private final TickBoxControl bundleInteractions;
+  private final TickBoxControl enderChestInteractions;
   private final CyclingControl<PickMode> pickMode;
   private final TickBoxControl autoRefill;
   private final TickBoxControl litematicaAutoTakeOut;
@@ -114,7 +116,6 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
   private final TickBoxControl pinnedWindows;
   private final TickBoxControl pinnedWindowSounds;
   private final CyclingControl<Integer> maxPinnedWindows;
-  private final TickBoxControl pinnedWindowsAlwaysRight;
 
   /** Key rows in display order, each with the mapping it edits. */
   private final Map<KeyMapping, KeyBindControl> keyControls = new LinkedHashMap<>();
@@ -153,6 +154,8 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
             defaults.itemStorageTooltip());
     itemStorageColors =
         toggle("item_storage_colors", current.itemStorageColors(), defaults.itemStorageColors());
+    showEmptyBoxes =
+        toggle("show_empty_boxes", current.showEmptyBoxes(), defaults.showEmptyBoxes());
     itemStorageHighlightSprite =
         cycle(
             "item_storage_highlight_sprite",
@@ -199,6 +202,11 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
         toggle("nested_item_tooltips", current.nestedItemTooltips(), defaults.nestedItemTooltips());
     bundleInteractions =
         toggle("bundle_interactions", current.bundleInteractions(), defaults.bundleInteractions());
+    enderChestInteractions =
+        toggle(
+            "ender_chest_interactions",
+            current.enderChestInteractions(),
+            defaults.enderChestInteractions());
     pickMode =
         register(
             new CyclingControl<>(
@@ -254,11 +262,6 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
                 current.maxPinnedWindows(),
                 defaults.maxPinnedWindows(),
                 value -> updateButtons()));
-    pinnedWindowsAlwaysRight =
-        toggle(
-            "pinned_windows_always_right",
-            current.pinnedWindowsAlwaysRight(),
-            defaults.pinnedWindowsAlwaysRight());
     Component keyDescription = Component.translatable(KEY_PREFIX + "key" + DESCRIPTION_SUFFIX);
     Component waiting = Component.translatable(KEY_PREFIX + "key.waiting");
     for (KeyMapping mapping : keyMappings.configurable()) {
@@ -281,12 +284,14 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
     list.addGroup(group("tooltips"), groupDescription("tooltips"));
     list.addOption(itemStorageTooltip);
     list.addOption(itemStorageColors);
+    list.addOption(showEmptyBoxes);
     list.addOption(itemStorageHighlightSprite);
     list.addOption(itemHeldByCursorTooltip);
     list.addOption(nestedItemTooltips);
     list.addOption(iconMarker);
     list.addGroup(group("moving_items"), groupDescription("moving_items"));
     list.addOption(bundleInteractions);
+    list.addOption(enderChestInteractions);
     list.addOption(controlScheme);
     list.addOption(verticalTooltipScrolling);
     list.addOption(singleItemMovement);
@@ -307,7 +312,6 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
     list.addOption(pinnedWindows);
     list.addOption(pinnedWindowSounds);
     list.addOption(maxPinnedWindows);
-    list.addOption(pinnedWindowsAlwaysRight);
     list.addGroup(group("keys"), groupDescription("keys"));
     keyControls.values().forEach(list::addOption);
 
@@ -499,6 +503,7 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
         controlScheme.get(),
         nestedItemTooltips.get(),
         bundleInteractions.get(),
+        enderChestInteractions.get(),
         pickMode.get(),
         autoRefill.get(),
         litematicaAutoTakeOut.get(),
@@ -509,7 +514,7 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
         pinnedWindows.get(),
         pinnedWindowSounds.get(),
         maxPinnedWindows.get(),
-        pinnedWindowsAlwaysRight.get());
+        showEmptyBoxes.get());
   }
 
   private boolean hasPendingChanges() {
@@ -524,8 +529,6 @@ public final class ShulkerToolkitSettingsScreen extends Screen {
     cancelOrReset.setMessage(pending ? CommonComponents.GUI_CANCEL : RESET_ALL);
     cancelOrReset.setTooltip(pending ? CANCEL_TOOLTIP : RESET_ALL_TOOLTIP);
     undo.active = pending;
-    // The depth only matters while crafting from boxes is on.
-    craftDepth.active = craftFromBoxes.get();
   }
 
   private void saveOrDone() {

@@ -120,9 +120,12 @@ public final class StorageMouseActions implements ItemSlotMouseAction {
       return false;
     }
     Slot slot = access.shulkertoolkit$hoveredSlot();
+    StorageKind clickedKind = StorageKind.of(stack);
     if (slot != null
+        && clickedKind != null
         && StorageInput.singleItemMovement()
-        && editable(StorageKind.of(stack), slot, slotIndex, stack, player)) {
+        && clickedKind.allowModification(stack)
+        && browsable(clickedKind, slot, slotIndex, stack, player)) {
       int wheel = wheel(scrollX, scrollY);
       if (wheel != 0) {
         boolean left = wheel <= 0;
@@ -136,7 +139,7 @@ public final class StorageMouseActions implements ItemSlotMouseAction {
     }
     ItemStack storageItem = storageItem(slotIndex, stack);
     StorageKind kind = StorageKind.of(storageItem);
-    if (kind == null || !editable(kind, slot, slotIndex, storageItem, player)) {
+    if (kind == null || !browsable(kind, slot, slotIndex, storageItem, player)) {
       return false;
     }
     int wheel = wheel(scrollX, scrollY);
@@ -178,7 +181,7 @@ public final class StorageMouseActions implements ItemSlotMouseAction {
     }
     clearDragging();
     StorageKind kind = StorageKind.of(stack);
-    if (kind != null && kind.allowModification(stack)) {
+    if (kind != null && matches(stack) && kind.allowModification(stack)) {
       Slot slot = access.shulkertoolkit$slotAt(event.x(), event.y());
       if (slot != null) {
         clickAction = dragAction(event.button(), slot, kind, stack, player);
@@ -254,10 +257,11 @@ public final class StorageMouseActions implements ItemSlotMouseAction {
     ItemStack storageItem = storageItem(slotIndex, stack);
     StorageKind kind = StorageKind.of(storageItem);
     if (kind == null
-        || !editable(kind, access.shulkertoolkit$hoveredSlot(), slotIndex, storageItem, player)) {
+        || !browsable(kind, access.shulkertoolkit$hoveredSlot(), slotIndex, storageItem, player)) {
       return false;
     }
-    if (StorageInput.preferences().nestedItemTooltips()) {
+    // An item whose window is open has no tooltip to open items in.
+    if (StorageInput.preferences().nestedItemTooltips() && !PinnedWindows.locks(storageItem)) {
       if (event.isSelection()) {
         openNested(kind, slotIndex, storageItem, player);
         return true;
@@ -287,7 +291,8 @@ public final class StorageMouseActions implements ItemSlotMouseAction {
     StorageKind kind = StorageKind.of(stack);
     if (player != null
         && kind != null
-        && kind.allowModification(stack)
+        && kind.viewable(stack)
+        && TransferGate.allowsKind(player, kind)
         && kind.hasContents(stack, player)) {
       graphics.setTooltipForNextFrame(
           screen.getFont(),
@@ -382,14 +387,20 @@ public final class StorageMouseActions implements ItemSlotMouseAction {
             && kind.hasAnyOf(stack, slot.getItem(), player, true));
   }
 
-  /** Easy Shulker Boxes' {@code allowModification(holder, slot, slotIndex, itemStack)}. */
-  private boolean editable(
+  /**
+   * Whether the wheel and keys may move the selection of {@code stack}: Easy Shulker Boxes' {@code
+   * allowModification(holder, slot, slotIndex, itemStack)}, a stack of ender chests included.
+   */
+  private boolean browsable(
       @Nullable StorageKind kind,
       @Nullable Slot slot,
       int slotIndex,
       ItemStack stack,
       LocalPlayer player) {
-    if (kind == null || !kind.allowModification(stack) || !kind.hasContents(stack, player)) {
+    if (kind == null
+        || !kind.viewable(stack)
+        || !kind.hasContents(stack, player)
+        || !TransferGate.allowsKind(player, kind)) {
       return false;
     }
     if (slotIndex == CURSOR || !nested.isEmpty()) {
@@ -435,7 +446,7 @@ public final class StorageMouseActions implements ItemSlotMouseAction {
     ItemStack item =
         selected >= 0 && selected < items.size() ? items.get(selected) : ItemStack.EMPTY;
     StorageKind itemKind = StorageKind.of(item);
-    if (itemKind == null) {
+    if (itemKind == null || !TransferGate.allowsKind(player, itemKind)) {
       return;
     }
     if (slotIndex != nestedSlot) {

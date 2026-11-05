@@ -27,6 +27,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickAction;
 import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.FurnaceMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -55,6 +56,10 @@ public final class StorageClicksGameTest {
   private static final int SECOND_BOX_SLOT = 4;
   private static final int LAST_BOX_SLOT = 8;
   private static final int ENDER_SLOT = 13;
+
+  /** Vanilla {@code AbstractFurnaceMenu#RESULT_SLOT}. */
+  private static final int FURNACE_RESULT_SLOT = 2;
+
   private static final ServerPolicy TRANSFER_FORBIDDEN =
       new ServerPolicy(false, true, true, true, true, true);
   private static final ControlScheme SPLIT = new ControlScheme(false, ClickScheme.SPLIT_INPUT);
@@ -188,6 +193,58 @@ public final class StorageClicksGameTest {
     helper.assertTrue(
         boxSlot.getItem().get(DataComponents.CONTAINER) == ItemContainerContents.EMPTY,
         "nothing may enter the box");
+    helper.succeed();
+  }
+
+  /** A result slot takes nothing back: what does not fit must stay there, not vanish. */
+  @GameTest
+  public void aFullBoxLeavesAResultSlotAlone(GameTestHelper helper) {
+    Player player = playerWithFurnaceOpen(helper);
+    List<ItemStack> initial = emptySlots();
+    for (int slot = 0; slot < StorageKind.SHULKER_SLOTS; slot++) {
+      initial.set(slot, new ItemStack(Items.DIRT, FULL_STACK));
+    }
+    initial.set(0, new ItemStack(Items.STONE, FULL_STACK - TORCH_COUNT));
+    ItemStack box = boxWith(initial);
+    Slot result = putInSlot(player, FURNACE_RESULT_SLOT, new ItemStack(Items.STONE, FULL_STACK));
+
+    boolean handled = boxOnCursorClicks(player, box, result, ClickAction.SECONDARY);
+
+    helper.assertTrue(handled, "the click is handled");
+    int total = result.getItem().getCount() + ShulkerFixtures.countInBox(box, Items.STONE);
+    helper.assertTrue(
+        total == 2 * FULL_STACK - TORCH_COUNT, "123 stone must stay 123, there are " + total);
+    helper.assertTrue(
+        result.getItem().getCount() == FULL_STACK, "a part of a result stack is never taken");
+    helper.succeed();
+  }
+
+  @GameTest
+  public void aBoxNeverSwallowsAShulkerBoxFromAResultSlot(GameTestHelper helper) {
+    Player player = playerWithFurnaceOpen(helper);
+    ItemStack box = new ItemStack(Items.SHULKER_BOX);
+    ItemStack dyed = ShulkerFixtures.box(new ItemStack(Items.DIRT, DIRT_COUNT));
+    Slot result = putInSlot(player, FURNACE_RESULT_SLOT, dyed);
+
+    boxOnCursorClicks(player, box, result, ClickAction.SECONDARY);
+
+    helper.assertTrue(
+        ShulkerFixtures.countInBox(result.getItem(), Items.DIRT) == DIRT_COUNT,
+        "the box and its dirt stay in the result slot, was " + result.getItem());
+    helper.succeed();
+  }
+
+  @GameTest
+  public void aBoxWithRoomTakesAWholeResultStack(GameTestHelper helper) {
+    Player player = playerWithFurnaceOpen(helper);
+    ItemStack box = new ItemStack(Items.SHULKER_BOX);
+    Slot result = putInSlot(player, FURNACE_RESULT_SLOT, new ItemStack(Items.STONE, FULL_STACK));
+
+    boxOnCursorClicks(player, box, result, ClickAction.SECONDARY);
+
+    helper.assertTrue(result.getItem().isEmpty(), "the result slot empties");
+    helper.assertTrue(
+        ShulkerFixtures.countInBox(box, Items.STONE) == FULL_STACK, "the stack is in the box");
     helper.succeed();
   }
 
@@ -347,6 +404,8 @@ public final class StorageClicksGameTest {
         StorageKind.SHULKER_BOX.allowModification(boxes),
         "inserting into two boxes at once would duplicate items");
     helper.assertFalse(StorageKind.BUNDLE.allowModification(bundles), "the same for bundles");
+    helper.assertFalse(StorageKind.SHULKER_BOX.viewable(boxes), "each box holds its own contents");
+    helper.assertFalse(StorageKind.BUNDLE.viewable(bundles), "and each bundle");
     helper.succeed();
   }
 
@@ -373,6 +432,14 @@ public final class StorageClicksGameTest {
         ChestMenu.threeRows(
             CONTAINER_ID, player.getInventory(), new SimpleContainer(StorageKind.SHULKER_SLOTS));
     StorageStates.of(player).setControlScheme(scheme);
+    StorageStates.of(player).setSelectedItem(StorageGrid.NO_ITEM);
+    return player;
+  }
+
+  private static Player playerWithFurnaceOpen(GameTestHelper helper) {
+    Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+    player.containerMenu = new FurnaceMenu(CONTAINER_ID, player.getInventory());
+    StorageStates.of(player).setControlScheme(ControlScheme.DEFAULT);
     StorageStates.of(player).setSelectedItem(StorageGrid.NO_ITEM);
     return player;
   }

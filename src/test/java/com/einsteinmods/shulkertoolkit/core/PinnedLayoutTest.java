@@ -22,7 +22,7 @@ class PinnedLayoutTest {
   private final int[] x = new int[PinnedPaths.MAX_DEPTH];
   private final int[] y = new int[PinnedPaths.MAX_DEPTH];
 
-  private void place(int width, int height, boolean leftAllowed, int count, int[] heights) {
+  private void place(int width, int height, int count, int[] heights) {
     int[] widths = {CHEST_WIDTH, CHEST_WIDTH, CHEST_WIDTH};
     PinnedLayout.place(
         width,
@@ -30,7 +30,6 @@ class PinnedLayoutTest {
         CONTAINER_LEFT,
         CONTAINER_TOP,
         CONTAINER_RIGHT,
-        leftAllowed,
         count,
         widths,
         heights,
@@ -40,7 +39,7 @@ class PinnedLayoutTest {
 
   @Test
   void oneWindowGoesRightOfTheContainerAtItsTop() {
-    place(SCREEN_WIDTH, SCREEN_HEIGHT, true, 1, new int[] {CHEST_HEIGHT, 0, 0});
+    place(SCREEN_WIDTH, SCREEN_HEIGHT, 1, new int[] {CHEST_HEIGHT, 0, 0});
 
     assertEquals(CONTAINER_RIGHT + PinnedLayout.GAP, x[0]);
     assertEquals(CONTAINER_TOP, y[0]);
@@ -49,7 +48,7 @@ class PinnedLayoutTest {
   @Test
   void windowsStackDownwardsThenMoveToTheLeft() {
     int[] heights = {CHEST_HEIGHT, CHEST_HEIGHT, CHEST_HEIGHT};
-    place(SCREEN_WIDTH, SHORT_SCREEN_HEIGHT, true, 3, heights);
+    place(SCREEN_WIDTH, SHORT_SCREEN_HEIGHT, 3, heights);
 
     int right = CONTAINER_RIGHT + PinnedLayout.GAP;
     int second = CONTAINER_TOP + CHEST_HEIGHT + PinnedLayout.GAP;
@@ -60,29 +59,10 @@ class PinnedLayoutTest {
   @Test
   void tallScreenFitsAllThreeOnTheRight() {
     int[] heights = {CHEST_HEIGHT, CHEST_HEIGHT, CHEST_HEIGHT};
-    place(SCREEN_WIDTH, 480, true, 3, heights);
+    place(SCREEN_WIDTH, 480, 3, heights);
 
     int right = CONTAINER_RIGHT + PinnedLayout.GAP;
     assertPrefix(new int[] {right, right, right}, x);
-  }
-
-  @Test
-  void withoutTheLeftSideASecondColumnOpensOnTheRight() {
-    int[] heights = {CHEST_HEIGHT, CHEST_HEIGHT, CHEST_HEIGHT};
-    place(1000, 270, false, 3, heights);
-
-    int right = CONTAINER_RIGHT + PinnedLayout.GAP;
-    assertPrefix(new int[] {right, right, right + CHEST_WIDTH + PinnedLayout.GAP}, x);
-    assertEquals(CONTAINER_TOP, y[2]);
-  }
-
-  @Test
-  void withoutRoomOrLeftSideWindowsAreHidden() {
-    int[] heights = {CHEST_HEIGHT, CHEST_HEIGHT, 400};
-    place(CONTAINER_RIGHT + 100, SCREEN_HEIGHT, false, 3, heights);
-
-    assertPrefix(new int[] {H, H, H}, x);
-    assertPrefix(new int[] {H, H, H}, y);
   }
 
   /** GUI scale 4 at 1080p: 480x270, the 176-wide inventory centred leaves 152 on each side. */
@@ -98,7 +78,6 @@ class PinnedLayoutTest {
         top,
         left + CHEST_WIDTH,
         top + INVENTORY_HEIGHT,
-        true,
         false,
         count,
         widths,
@@ -143,7 +122,6 @@ class PinnedLayoutTest {
             top,
             left + CHEST_WIDTH,
             top + INVENTORY_HEIGHT,
-            false,
             true,
             1,
             widths,
@@ -220,7 +198,6 @@ class PinnedLayoutTest {
         top,
         left + CHEST_WIDTH,
         top + INVENTORY_HEIGHT,
-        false,
         true,
         count,
         widths,
@@ -286,14 +263,6 @@ class PinnedLayoutTest {
         },
         x);
     assertPrefix(new int[] {above, above, above, below, below, below}, y);
-  }
-
-  /** «Always on the right»: six windows keep the column layout. */
-  @Test
-  void alwaysRightKeepsColumns() {
-    assertEquals(PinnedLayout.FULL_SCALE, placeScaled(640, 360, 6, sixChests()));
-    assertEquals((640 + CHEST_WIDTH) / 2 + PinnedLayout.GAP, x[0]);
-    assertEquals((360 - INVENTORY_HEIGHT) / 2, y[0]);
   }
 
   /** Without the recipe book: columns, three on the right then the rest on the left. */

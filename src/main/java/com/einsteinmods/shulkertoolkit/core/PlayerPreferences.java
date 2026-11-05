@@ -8,6 +8,8 @@ package com.einsteinmods.shulkertoolkit.core;
  * @param autoRefill refill the held stack from shulker boxes when it runs out
  * @param bundleInteractions bundles use the container item controls instead of vanilla's; the
  *     server must know it because it decides the clicks the client predicts
+ * @param enderChestInteractions the ender chest item uses the container item controls instead of
+ *     vanilla's; the server must know it for the same reason
  * @param pickupOverflowToBoxes picked-up items that do not fit in the inventory go into the shulker
  *     boxes in it
  * @param pickupDirectToBox picked-up items go straight into a shulker box already holding them,
@@ -20,11 +22,32 @@ public record PlayerPreferences(
     PickMode pickMode,
     boolean autoRefill,
     boolean bundleInteractions,
+    boolean enderChestInteractions,
     boolean pickupOverflowToBoxes,
     boolean pickupDirectToBox,
     boolean craftFromBoxes,
     CraftDepth craftDepth) {
   public static final PlayerPreferences DEFAULTS = new PlayerPreferences(PickMode.DEFAULT, true);
+
+  /** Preferences with the ender chest left to vanilla, the default. */
+  public PlayerPreferences(
+      PickMode pickMode,
+      boolean autoRefill,
+      boolean bundleInteractions,
+      boolean pickupOverflowToBoxes,
+      boolean pickupDirectToBox,
+      boolean craftFromBoxes,
+      CraftDepth craftDepth) {
+    this(
+        pickMode,
+        autoRefill,
+        bundleInteractions,
+        false,
+        pickupOverflowToBoxes,
+        pickupDirectToBox,
+        craftFromBoxes,
+        craftDepth);
+  }
 
   /** Preferences with crafting from boxes on at the default depth, the default. */
   public PlayerPreferences(

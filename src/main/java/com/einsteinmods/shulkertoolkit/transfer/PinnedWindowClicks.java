@@ -36,12 +36,12 @@ import org.jspecify.annotations.Nullable;
 /**
  * Server side of pinned window clicks ({@link PinnedWindowClickPayload}), as vanilla {@code
  * ServerGamePacketListenerImpl#handleContainerClick} applies one menu click: the server finds the
- * container item again from the path, checks every level (same item, a single one, editable, kind
- * allowed), edits copies ({@link PinnedWindowEdit}), writes the result back up the path and only
- * then commits everything at once; vanilla's menu sync then sends the changed slots and cursor. A
- * click that fails a check changes nothing, so a box that moved, was dropped or changed meanwhile
- * can never duplicate items. Server thread only; work is bounded by the path (up to 6 levels) and
- * the slots involved.
+ * container item again from the path, checks every level (same item, a single one or ender chests,
+ * editable, kind allowed), edits copies ({@link PinnedWindowEdit}), writes the result back up the
+ * path and only then commits everything at once; vanilla's menu sync then sends the changed slots
+ * and cursor. A click that fails a check changes nothing, so a box that moved, was dropped or
+ * changed meanwhile can never duplicate items. Server thread only; work is bounded by the path (up
+ * to 6 levels) and the slots involved.
  */
 public final class PinnedWindowClicks {
   private PinnedWindowClicks() {}
@@ -87,7 +87,7 @@ public final class PinnedWindowClicks {
     PinnedWindowEdit edit =
         new PinnedWindowEdit(kind, kind.items(target, player), menu.getCarried());
     Commit commit = new Commit();
-    if (!edit(player, menu, root, payload, edit, commit)) {
+    if (!edit(player, menu, root, payload, edit, commit, policy.allowTransfer())) {
       return false;
     }
     if (edit.changed() && !writeBack(player, chain, levels, kind, target, edit, commit)) {
@@ -124,12 +124,18 @@ public final class PinnedWindowClicks {
       Slot root,
       PinnedWindowClickPayload payload,
       PinnedWindowEdit edit,
-      Commit commit) {
+      Commit commit,
+      boolean transferAllowed) {
     int slot = payload.slot();
     // If-chains instead of enum switches: no synthetic switch-map class in the jar.
     PinnedAction action = payload.action();
     if (action == PinnedAction.PICKUP) {
-      return edit.pickup(slot, payload.button() == PinnedAction.PRIMARY_BUTTON);
+      return edit.pickup(
+          slot,
+          payload.button() == PinnedAction.PRIMARY_BUTTON,
+          payload.selected(),
+          player,
+          transferAllowed);
     }
     if (action == PinnedAction.QUICK_MOVE_OUT) {
       if (!PinnedPaths.isValidIndex(slot, edit.slots().size())) {
@@ -355,7 +361,7 @@ public final class PinnedWindowClicks {
         StorageKind kind = StorageKind.of(stack);
         if (kind == null
             || stack.getItem() != levels.get(level).item()
-            || !kind.allowModification(stack)
+            || !kind.viewable(stack)
             || (kind == StorageKind.ENDER_CHEST && !policy.allowEnderPreview())) {
           return null;
         }

@@ -10,10 +10,12 @@
     "ItemEntityMixin",
     "ItemStackAccessor",
     "LivingEntityMixin",
+    "PlayerEnderChestContainerMixin",
     "ServerGamePacketListenerImplMixin",
     "ServerPlaceRecipeMixin",
     "ServerPlayerGameModeMixin",
     "ServerPlayerMixin",
+    "SimpleContainerMixin",
     "StackedItemContentsAccessor"
   ],
   "injectors": {

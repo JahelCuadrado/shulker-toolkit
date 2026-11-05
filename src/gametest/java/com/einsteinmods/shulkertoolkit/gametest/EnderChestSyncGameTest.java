@@ -54,6 +54,23 @@ public final class EnderChestSyncGameTest {
     helper.succeed();
   }
 
+  /** A command or another mod changes the chest: its contents go once, at the tick's end. */
+  @GameTest
+  public void changesFromOutsideAreSentOnce(GameTestHelper helper) {
+    ServerPlayer player = ShulkerFixtures.playerWithoutMod(helper, GameType.SURVIVAL);
+    EnderChestSync.sendChanged();
+
+    player.getEnderChestInventory().setItem(FIRST_SLOT, new ItemStack(Items.DIAMOND));
+
+    helper.assertTrue(EnderChestSync.hasPendingChange(player), "the change waits for the tick");
+    EnderChestSync.sendContents(player);
+    helper.assertFalse(EnderChestSync.hasPendingChange(player), "a send in between covers it");
+    player.getEnderChestInventory().removeItem(FIRST_SLOT, 1);
+    EnderChestSync.sendChanged();
+    helper.assertFalse(EnderChestSync.hasPendingChange(player), "and the tick's end sends it");
+    helper.succeed();
+  }
+
   /** A fake player has no mod channels: nothing may be sent to it. */
   @GameTest
   public void playersWithoutTheModReceiveNothing(GameTestHelper helper) {

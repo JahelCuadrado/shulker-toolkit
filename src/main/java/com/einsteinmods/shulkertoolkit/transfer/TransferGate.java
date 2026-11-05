@@ -7,6 +7,7 @@ import java.util.function.BooleanSupplier;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.ChestMenu;
 
 /**
  * Whether a click may move items into or out of a container item. The server decides: its policy
@@ -21,14 +22,19 @@ public final class TransferGate {
 
   private static BooleanSupplier clientAllowsEnder = () -> false;
   private static BooleanSupplier clientBundles = () -> false;
+  private static BooleanSupplier clientEnderChests = () -> false;
 
   private TransferGate() {}
 
   public static void installClientCheck(
-      BooleanSupplier transfer, BooleanSupplier enderChest, BooleanSupplier bundles) {
+      BooleanSupplier transfer,
+      BooleanSupplier enderChest,
+      BooleanSupplier bundles,
+      BooleanSupplier enderChests) {
     clientAllows = transfer;
     clientAllowsEnder = enderChest;
     clientBundles = bundles;
+    clientEnderChests = enderChests;
   }
 
   /** Called on clicks only: one side check, then one map lookup and one channel lookup. */
@@ -42,8 +48,9 @@ public final class TransferGate {
 
   /**
    * Whether {@code kind} may be edited by {@code player}, once {@link #allows} said yes: the ender
-   * chest needs its preview allowed, bundles the player's bundle interactions option (else they
-   * stay vanilla).
+   * chest needs its preview allowed, the player's ender chest interactions option and its own menu
+   * closed (that menu already shows the same contents), bundles the bundle interactions option
+   * (else they stay vanilla).
    */
   public static boolean allowsKind(Player player, StorageKind kind) {
     boolean client = player.level().isClientSide();
@@ -56,8 +63,16 @@ public final class TransferGate {
       return true;
     }
     return client
-        ? clientAllowsEnder.getAsBoolean()
-        : player instanceof ServerPlayer serverPlayer && policyOf(serverPlayer).allowEnderPreview();
+        ? clientAllowsEnder.getAsBoolean() && clientEnderChests.getAsBoolean()
+        : player instanceof ServerPlayer serverPlayer
+            && policyOf(serverPlayer).allowEnderPreview()
+            && ServerPlayerSessions.preferences(player.getUUID()).enderChestInteractions()
+            && !showsEnderInventory(serverPlayer);
+  }
+
+  private static boolean showsEnderInventory(Player player) {
+    return player.containerMenu instanceof ChestMenu menu
+        && menu.getContainer() == player.getEnderChestInventory();
   }
 
   /** The server's rule, without the player lookups. */

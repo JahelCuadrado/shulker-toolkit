@@ -15,8 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class ClientSettingsFileTest {
-  private static final int LEVEL_THREE = 3;
-  private static final int LEVEL_FOUR = 4;
 
   private static final String PARTIAL_JSON =
       """
@@ -78,13 +76,14 @@ class ClientSettingsFileTest {
             ClickScheme.SINGLE_INPUT,
             true,
             false,
+            false,
             PickMode.FULL_STACK,
             true,
             true,
             false,
             false,
             true,
-            CraftDepth.INVENTORY_BOXES,
+            CraftDepth.SHALLOW,
             true,
             true,
             3,
@@ -109,6 +108,19 @@ class ClientSettingsFileTest {
   }
 
   @Test
+  void filesWithoutShowEmptyBoxesKeepEmptyBoxesHidden(@TempDir Path directory) throws IOException {
+    assertFalse(loadFrom(directory, PARTIAL_JSON).showEmptyBoxes());
+    assertFalse(loadFrom(directory, VERSION_1_JSON).showEmptyBoxes());
+  }
+
+  @Test
+  void showEmptyBoxesStaysOnTheClient() {
+    assertEquals(
+        ClientPreferences.DEFAULTS.toPlayer(),
+        ClientPreferences.DEFAULTS.withShowEmptyBoxes(true).toPlayer());
+  }
+
+  @Test
   void unknownValuesFallBackToDefaults(@TempDir Path directory) throws IOException {
     ClientPreferences loaded = loadFrom(directory, UNKNOWN_VALUES_JSON);
 
@@ -128,23 +140,25 @@ class ClientSettingsFileTest {
     assertFalse(loaded.autoRefill());
   }
 
-  /**
-   * Depths saved before level 2 (loose ender chest items) existed: the saved name keeps its
-   * containers, so the old level 2 reads as level 3 and the old level 3 as level 4.
-   */
+  /** The four earlier levels, saved by name: each reads as the level now holding its containers. */
   @Test
-  void depthsSavedBeforeLevelTwoMoveUpOneLevel(@TempDir Path directory) throws IOException {
+  void depthsSavedWithFourLevelsReadAsTheirNewLevel(@TempDir Path directory) throws IOException {
     assertEquals(
-        CraftDepth.INVENTORY_BOXES,
-        loadFrom(directory, savedDepth("INVENTORY_BOXES")).craftDepth());
+        CraftDepth.SHALLOW, loadFrom(directory, savedDepth("INVENTORY_BOXES")).craftDepth());
     assertEquals(
-        CraftDepth.ENDER_CHEST_BOXES,
-        loadFrom(directory, savedDepth("ENDER_CHEST_BOXES")).craftDepth());
-    assertEquals(LEVEL_THREE, CraftDepth.ENDER_CHEST_BOXES.ordinal() + 1);
+        CraftDepth.DEEP, loadFrom(directory, savedDepth("ENDER_CHEST_ITEMS")).craftDepth());
     assertEquals(
-        CraftDepth.BUNDLES_IN_BOXES,
-        loadFrom(directory, savedDepth("BUNDLES_IN_BOXES")).craftDepth());
-    assertEquals(LEVEL_FOUR, CraftDepth.BUNDLES_IN_BOXES.ordinal() + 1);
+        CraftDepth.DEEP, loadFrom(directory, savedDepth("ENDER_CHEST_BOXES")).craftDepth());
+    assertEquals(
+        CraftDepth.DEEPEST, loadFrom(directory, savedDepth("BUNDLES_IN_BOXES")).craftDepth());
+    assertEquals(CraftDepth.DEFAULT, loadFrom(directory, savedDepth("NO_SUCH_LEVEL")).craftDepth());
+  }
+
+  @Test
+  void newDepthsAreSavedByName(@TempDir Path directory) throws IOException {
+    for (CraftDepth depth : CraftDepth.values()) {
+      assertEquals(depth, loadFrom(directory, savedDepth(depth.name())).craftDepth());
+    }
   }
 
   private static String savedDepth(String depth) {
@@ -211,6 +225,24 @@ class ClientSettingsFileTest {
         loadFrom(directory, "{\"schemaVersion\": 3, \"maxPinnedWindows\": 5}").maxPinnedWindows());
   }
 
+  /** The removed «always on the right» option: an old file still loads, its field ignored. */
+  @Test
+  void removedAlwaysRightFieldIsIgnored(@TempDir Path directory) throws IOException {
+    ClientPreferences loaded =
+        loadFrom(
+            directory,
+            """
+            {
+              "schemaVersion": 4,
+              "pinnedWindowsAlwaysRight": true,
+              "maxPinnedWindows": 5
+            }
+            """);
+
+    assertEquals(5, loaded.maxPinnedWindows());
+    assertEquals(ClientPreferences.DEFAULTS.showEmptyBoxes(), loaded.showEmptyBoxes());
+  }
+
   @Test
   void savedPreferencesLoadBack(@TempDir Path directory) {
     ClientPreferences preferences =
@@ -225,13 +257,14 @@ class ClientSettingsFileTest {
             ClickScheme.SPLIT_INPUT,
             false,
             true,
+            true,
             PickMode.SINGLE_ITEM,
             false,
             false,
             true,
             true,
             false,
-            CraftDepth.BUNDLES_IN_BOXES,
+            CraftDepth.DEEPEST,
             false,
             false,
             6,
@@ -250,5 +283,6 @@ class ClientSettingsFileTest {
     assertEquals(PickMode.SINGLE_ITEM, preferences.toPlayer().pickMode());
     assertEquals(false, preferences.toPlayer().autoRefill());
     assertEquals(false, preferences.toPlayer().bundleInteractions());
+    assertEquals(false, preferences.toPlayer().enderChestInteractions());
   }
 }

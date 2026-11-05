@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.0 — 2026-11-05
+
+- **Choose how deep to look:** one depth setting now drives crafting, pick block and Litematica,
+  with three levels: the boxes and bundles in your inventory, then the bundles inside those boxes
+  and everything in your ender chest, then the bundles inside the boxes in your ender chest.
+- **Litematica material list:** what your boxes hold counts as available, up to your depth level.
+- **Windows you can drive:** with a middle-click window open, the wheel and right click on its box
+  work through the window; right click on a box or bundle inside a window takes items out of it or
+  puts them in, and the wheel picks which.
+- **Stacks of ender chests:** right click still splits the stack, unless you chose an item with the
+  wheel: then it takes that out.
+- **Empty boxes (optional):** show the empty grid of an empty shulker box or ender chest.
+- **Other mods' buttons:** windows keep clear of the sort buttons that mods such as Inventory
+  Management add beside the screen.
+- **Clearer behaviour:** the item you hold always decides what a right click does; an undyed shulker
+  box shows its own colour; your ender chest's contents open in one place at a time.
+- **Fixes:** an ender chest inside your ender chest could duplicate or lose items, and taking from a
+  crafting result slot into a box could lose items; changes made to your ender chest by commands or
+  other mods now show at once.
+
 ## 1.1.0 — 2026-10-24
 
 - **Middle-click windows at the work stations:** open your shulker boxes, bundles and ender chest

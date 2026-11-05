@@ -11,9 +11,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
@@ -73,6 +77,40 @@ final class ShulkerFixtures {
         .filter(stack -> stack.is(item))
         .mapToInt(ItemStack::getCount)
         .sum();
+  }
+
+  /** Items of {@code item} in {@code stack} and inside it, through boxes and bundles. */
+  static int countDeep(ItemStack stack, Item item) {
+    int count = stack.is(item) ? stack.getCount() : 0;
+    ItemContainerContents contents = stack.get(DataComponents.CONTAINER);
+    if (contents != null) {
+      count +=
+          contents.nonEmptyItemCopyStream().mapToInt(inside -> countDeep(inside, item)).sum()
+              * stack.getCount();
+    }
+    BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
+    if (bundle != null) {
+      for (ItemStackTemplate template : bundle.items()) {
+        count += countDeep(template.create(), item) * stack.getCount();
+      }
+    }
+    return count;
+  }
+
+  /** Items of {@code item} anywhere in {@code container}, through boxes and bundles. */
+  static int countDeep(Container container, Item item) {
+    int count = 0;
+    for (int slot = 0; slot < container.getContainerSize(); slot++) {
+      count += countDeep(container.getItem(slot), item);
+    }
+    return count;
+  }
+
+  /** Everything {@code player} owns of {@code item}: cursor, inventory and ender chest. */
+  static int countOwned(Player player, Item item) {
+    return countDeep(player.containerMenu.getCarried(), item)
+        + countDeep(player.getInventory(), item)
+        + countDeep(player.getEnderChestInventory(), item);
   }
 
   /** Copies of the 36 hotbar and main inventory slots. */

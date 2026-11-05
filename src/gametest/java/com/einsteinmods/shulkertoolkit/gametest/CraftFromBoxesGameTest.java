@@ -5,6 +5,7 @@ import com.einsteinmods.shulkertoolkit.core.PickMode;
 import com.einsteinmods.shulkertoolkit.core.PlayerPreferences;
 import com.einsteinmods.shulkertoolkit.core.ServerPolicy;
 import com.einsteinmods.shulkertoolkit.craft.CraftFromBoxes;
+import com.einsteinmods.shulkertoolkit.server.ServerPlayerSessions;
 import java.util.List;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.component.DataComponents;
@@ -43,6 +44,9 @@ public final class CraftFromBoxesGameTest {
   private static final int ENDER_ITEM_SLOT = 10;
   private static final int ENDER_BOX_SLOT = 0;
   private static final int LOOSE_ENDER_SLOT = 1;
+  private static final int BUNDLE_BOX_SLOT = 2;
+  private static final int ENDER_BUNDLE_SLOT = 3;
+  private static final int INVENTORY_BUNDLE_SLOT = 11;
   private static final boolean SINGLE_CRAFT = false;
   private static final boolean MAX_CRAFT = true;
   private static final ServerPolicy CRAFT_FORBIDDEN =
@@ -50,7 +54,7 @@ public final class CraftFromBoxesGameTest {
 
   @GameTest
   public void planksOnlyInABoxArePlacedInTheGrid(GameTestHelper helper) {
-    ServerPlayer player = player(helper, CraftDepth.INVENTORY_BOXES);
+    ServerPlayer player = player(helper, CraftDepth.SHALLOW);
     ItemStack box = planksBox();
     player.getInventory().setItem(BOX_SLOT, box);
 
@@ -66,7 +70,7 @@ public final class CraftFromBoxesGameTest {
 
   @GameTest
   public void maxCraftEmptiesTheBoxIntoTheGrid(GameTestHelper helper) {
-    ServerPlayer player = player(helper, CraftDepth.INVENTORY_BOXES);
+    ServerPlayer player = player(helper, CraftDepth.SHALLOW);
     ItemStack box = planksBox();
     player.getInventory().setItem(BOX_SLOT, box);
 
@@ -81,7 +85,7 @@ public final class CraftFromBoxesGameTest {
 
   @GameTest
   public void depthOneIgnoresTheEnderChest(GameTestHelper helper) {
-    ServerPlayer player = player(helper, CraftDepth.INVENTORY_BOXES);
+    ServerPlayer player = player(helper, CraftDepth.SHALLOW);
     ItemStack enderBox = enderSetup(player, true);
 
     assertVanilla(helper, player);
@@ -92,8 +96,8 @@ public final class CraftFromBoxesGameTest {
   }
 
   @GameTest
-  public void depthThreeWithoutAnEnderChestItemIgnoresTheEnderChest(GameTestHelper helper) {
-    ServerPlayer player = player(helper, CraftDepth.ENDER_CHEST_BOXES);
+  public void depthTwoWithoutAnEnderChestItemIgnoresTheEnderChest(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.DEEP);
     ItemStack enderBox = enderSetup(player, false);
 
     assertVanilla(helper, player);
@@ -104,8 +108,8 @@ public final class CraftFromBoxesGameTest {
   }
 
   @GameTest
-  public void depthThreeWithAnEnderChestItemUsesEnderChestBoxes(GameTestHelper helper) {
-    ServerPlayer player = player(helper, CraftDepth.ENDER_CHEST_BOXES);
+  public void depthTwoWithAnEnderChestItemUsesEnderChestBoxes(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.DEEP);
     ItemStack enderBox = enderSetup(player, true);
 
     place(helper, player, SINGLE_CRAFT);
@@ -123,14 +127,12 @@ public final class CraftFromBoxesGameTest {
   }
 
   @GameTest
-  public void depthTwoUsesLooseEnderChestItemsButNotItsBoxes(GameTestHelper helper) {
-    ServerPlayer player = player(helper, CraftDepth.ENDER_CHEST_ITEMS);
+  public void depthTwoUsesLooseEnderChestItems(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.DEEP);
     player.getInventory().setItem(ENDER_ITEM_SLOT, new ItemStack(Items.ENDER_CHEST));
     player
         .getEnderChestInventory()
         .setItem(LOOSE_ENDER_SLOT, new ItemStack(Items.OAK_PLANKS, GRID_SLOTS));
-    ItemStack enderBox = planksBox();
-    player.getEnderChestInventory().setItem(ENDER_BOX_SLOT, enderBox);
 
     place(helper, player, MAX_CRAFT);
 
@@ -138,15 +140,29 @@ public final class CraftFromBoxesGameTest {
     helper.assertTrue(
         player.getEnderChestInventory().getItem(LOOSE_ENDER_SLOT).isEmpty(),
         "the loose ender chest planks went to the grid");
+    helper.succeed();
+  }
+
+  @GameTest
+  public void depthTwoUsesABundleInTheEnderChest(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.DEEP);
+    player.getInventory().setItem(ENDER_ITEM_SLOT, new ItemStack(Items.ENDER_CHEST));
+    player.getEnderChestInventory().setItem(ENDER_BOX_SLOT, planksBundle());
+
+    place(helper, player, SINGLE_CRAFT);
+
+    assertGridHolds(helper, player, PLANKS_PER_SLOT);
     helper.assertTrue(
-        ShulkerFixtures.countInBox(enderBox, Items.OAK_PLANKS) == STORED_PLANKS,
-        "boxes inside the ender chest are not read at level 2");
+        ShulkerFixtures.countDeep(
+                player.getEnderChestInventory().getItem(ENDER_BOX_SLOT), Items.OAK_PLANKS)
+            == 0,
+        "the ender chest bundle must lose exactly the planks in the grid");
     helper.succeed();
   }
 
   @GameTest
   public void depthTwoWithoutAnEnderChestItemIgnoresLooseEnderChestItems(GameTestHelper helper) {
-    ServerPlayer player = player(helper, CraftDepth.ENDER_CHEST_ITEMS);
+    ServerPlayer player = player(helper, CraftDepth.DEEP);
     player
         .getEnderChestInventory()
         .setItem(LOOSE_ENDER_SLOT, new ItemStack(Items.OAK_PLANKS, GRID_SLOTS));
@@ -159,8 +175,23 @@ public final class CraftFromBoxesGameTest {
   }
 
   @GameTest
-  public void depthThreeIgnoresBundles(GameTestHelper helper) {
-    ServerPlayer player = player(helper, CraftDepth.ENDER_CHEST_BOXES);
+  public void depthOneUsesABundleInTheInventory(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.SHALLOW);
+    ItemStack bundle = planksBundle();
+    player.getInventory().setItem(BOX_SLOT, bundle);
+
+    place(helper, player, SINGLE_CRAFT);
+
+    assertGridHolds(helper, player, PLANKS_PER_SLOT);
+    helper.assertTrue(
+        bundle.getOrDefault(DataComponents.BUNDLE_CONTENTS, BundleContents.EMPTY).isEmpty(),
+        "the bundle must lose exactly the planks in the grid");
+    helper.succeed();
+  }
+
+  @GameTest
+  public void depthOneIgnoresBundlesInBoxes(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.SHALLOW);
     player.getInventory().setItem(BOX_SLOT, ShulkerFixtures.box(planksBundle()));
 
     assertVanilla(helper, player);
@@ -168,8 +199,38 @@ public final class CraftFromBoxesGameTest {
   }
 
   @GameTest
-  public void depthFourUsesABundleInABox(GameTestHelper helper) {
-    ServerPlayer player = player(helper, CraftDepth.BUNDLES_IN_BOXES);
+  public void depthTwoIgnoresBundlesInEnderChestBoxes(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.DEEP);
+    player.getInventory().setItem(ENDER_ITEM_SLOT, new ItemStack(Items.ENDER_CHEST));
+    player.getEnderChestInventory().setItem(BUNDLE_BOX_SLOT, ShulkerFixtures.box(planksBundle()));
+
+    assertVanilla(helper, player);
+    helper.succeed();
+  }
+
+  @GameTest
+  public void depthThreeUsesABundleInAnEnderChestBox(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.DEEPEST);
+    player.getInventory().setItem(ENDER_ITEM_SLOT, new ItemStack(Items.ENDER_CHEST));
+    ItemStack enderBox = ShulkerFixtures.box(planksBundle());
+    player.getEnderChestInventory().setItem(BUNDLE_BOX_SLOT, enderBox);
+
+    place(helper, player, SINGLE_CRAFT);
+
+    assertGridHolds(helper, player, PLANKS_PER_SLOT);
+    helper.assertTrue(
+        player.getEnderChestInventory().getItem(BUNDLE_BOX_SLOT) == enderBox,
+        "the ender chest box is changed in place");
+    helper.assertTrue(
+        ShulkerFixtures.countDeep(enderBox, Items.OAK_PLANKS) == 0
+            && ShulkerFixtures.countDeep(enderBox, Items.BUNDLE) == 1,
+        "the bundle stays in the box and loses exactly the planks in the grid");
+    helper.succeed();
+  }
+
+  @GameTest
+  public void depthTwoUsesABundleInABox(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.DEEP);
     ItemStack box = ShulkerFixtures.box(planksBundle());
     player.getInventory().setItem(BOX_SLOT, box);
 
@@ -185,6 +246,60 @@ public final class CraftFromBoxesGameTest {
     helper.assertTrue(
         bundle.getOrDefault(DataComponents.BUNDLE_CONTENTS, BundleContents.EMPTY).isEmpty(),
         "the bundle must lose exactly the planks in the grid");
+    helper.succeed();
+  }
+
+  /**
+   * Every depth, with planks in each place any depth reads: a single and a max craft only move
+   * planks into the grid, none is lost or copied.
+   */
+  @GameTest
+  public void everyDepthConservesThePlanks(GameTestHelper helper) {
+    for (CraftDepth depth : CraftDepth.values()) {
+      for (boolean useMaxItems : new boolean[] {SINGLE_CRAFT, MAX_CRAFT}) {
+        ServerPlayer player = player(helper, depth);
+        player
+            .getInventory()
+            .setItem(
+                BOX_SLOT, ShulkerFixtures.box(new ItemStack(Items.OAK_PLANKS), planksBundle()));
+        player.getInventory().setItem(INVENTORY_BUNDLE_SLOT, planksBundle());
+        player.getInventory().setItem(ENDER_ITEM_SLOT, new ItemStack(Items.ENDER_CHEST));
+        player.getEnderChestInventory().setItem(ENDER_BUNDLE_SLOT, planksBundle());
+        player.getEnderChestInventory().setItem(ENDER_BOX_SLOT, planksBox());
+        player
+            .getEnderChestInventory()
+            .setItem(LOOSE_ENDER_SLOT, new ItemStack(Items.OAK_PLANKS, PLANKS_PER_SLOT));
+        player
+            .getEnderChestInventory()
+            .setItem(BUNDLE_BOX_SLOT, ShulkerFixtures.box(planksBundle()));
+        int before = ShulkerFixtures.countOwned(player, Items.OAK_PLANKS);
+
+        place(helper, player, useMaxItems);
+
+        int after = ShulkerFixtures.countOwned(player, Items.OAK_PLANKS);
+        for (Slot slot : player.inventoryMenu.getInputGridSlots()) {
+          after += slot.getItem().getCount();
+        }
+        helper.assertTrue(after == before, depth + " turned " + before + " planks into " + after);
+        ServerPlayerSessions.remove(player.getUUID());
+      }
+    }
+    helper.succeed();
+  }
+
+  /** The contents live in the player: a stack of ender chest items opens them too. */
+  @GameTest
+  public void aStackOfEnderChestItemsReachesTheEnderChest(GameTestHelper helper) {
+    ServerPlayer player = player(helper, CraftDepth.DEEP);
+    ItemStack enderBox = enderSetup(player, false);
+    player.getInventory().setItem(ENDER_ITEM_SLOT, new ItemStack(Items.ENDER_CHEST, GRID_SLOTS));
+
+    place(helper, player, SINGLE_CRAFT);
+
+    assertGridHolds(helper, player, PLANKS_PER_SLOT);
+    helper.assertTrue(
+        ShulkerFixtures.countInBox(enderBox, Items.OAK_PLANKS) == STORED_PLANKS - GRID_SLOTS,
+        "the ender chest box must lose exactly the planks in the grid");
     helper.succeed();
   }
 

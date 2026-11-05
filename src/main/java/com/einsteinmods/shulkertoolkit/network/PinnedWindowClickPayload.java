@@ -3,6 +3,7 @@ package com.einsteinmods.shulkertoolkit.network;
 import com.einsteinmods.shulkertoolkit.ShulkerToolkit;
 import com.einsteinmods.shulkertoolkit.core.PinnedAction;
 import com.einsteinmods.shulkertoolkit.core.PinnedPaths;
+import com.einsteinmods.shulkertoolkit.core.StorageGrid;
 import io.netty.handler.codec.DecoderException;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,9 +25,11 @@ import net.minecraft.world.item.Item;
  * @param slot the window slot clicked ({@link PinnedAction#QUICK_MOVE_IN}: the menu slot moved in;
  *     bundles: -1 for the free part of the window)
  * @param button the mouse button ({@code PICKUP}) or the hotbar slot ({@code SWAP})
+ * @param selected the client's selection inside the clicked slot's item, for a right click that
+ *     works on its contents ({@code StorageGrid.NO_ITEM}: none)
  */
 public record PinnedWindowClickPayload(
-    int containerId, List<Level> levels, PinnedAction action, int slot, int button)
+    int containerId, List<Level> levels, PinnedAction action, int slot, int button, int selected)
     implements CustomPacketPayload {
   public static final Type<PinnedWindowClickPayload> TYPE =
       new Type<>(ShulkerToolkit.id("pinned_window_click"));
@@ -45,6 +48,12 @@ public record PinnedWindowClickPayload(
    */
   public record Level(int index, Item item) {}
 
+  /** A click with no selection inside the clicked slot's item. */
+  public PinnedWindowClickPayload(
+      int containerId, List<Level> levels, PinnedAction action, int slot, int button) {
+    this(containerId, levels, action, slot, button, StorageGrid.NO_ITEM);
+  }
+
   @Override
   public Type<PinnedWindowClickPayload> type() {
     return TYPE;
@@ -60,6 +69,7 @@ public record PinnedWindowClickPayload(
     buffer.writeByte(payload.action().id());
     buffer.writeVarInt(payload.slot());
     buffer.writeVarInt(payload.button());
+    buffer.writeVarInt(payload.selected());
   }
 
   private static PinnedWindowClickPayload read(RegistryFriendlyByteBuf buffer) {
@@ -78,6 +88,11 @@ public record PinnedWindowClickPayload(
       throw new DecoderException("Unknown pinned window action " + actionId);
     }
     return new PinnedWindowClickPayload(
-        containerId, List.copyOf(levels), action, buffer.readVarInt(), buffer.readVarInt());
+        containerId,
+        List.copyOf(levels),
+        action,
+        buffer.readVarInt(),
+        buffer.readVarInt(),
+        buffer.readVarInt());
   }
 }

@@ -24,79 +24,22 @@ public final class LitematicaMixinPlugin implements IMixinConfigPlugin {
   private static final String MIXIN_PACKAGE =
       "com.einsteinmods.shulkertoolkit.client.compat.litematica.mixin.";
 
+  private static final String CONFIG_BOOLEAN = "fi/dy/masa/malilib/config/options/ConfigBoolean";
+  private static final String GET_BOOLEAN_VALUE = "getBooleanValue";
+  private static final String BOOLEAN_GETTER = "()Z";
+
   /**
-   * One hook: the mod it needs and, for mod targets, the method and the single call inside it the
-   * injection relies on.
+   * One method a hook injects into and the single call inside it the injection relies on (or, for a
+   * hook at the head, a call that shows the method still works the way the hook assumes).
    */
-  private enum Hook {
-    EASY_PLACE(
-        "InventoryUtilsMixin",
-        LitematicaCompat.LITEMATICA_MOD_ID,
-        "Easy Place",
-        "schematicWorldPickBlock",
-        "(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/core/BlockPos;"
-            + "Lnet/minecraft/world/level/Level;Lnet/minecraft/client/Minecraft;)V",
-        "fi/dy/masa/malilib/config/options/ConfigBoolean",
-        "getBooleanValue",
-        "()Z"),
-    PRINTER(
-        "GuideMixin",
-        LitematicaCompat.PRINTER_MOD_ID,
-        "Litematica Printer",
-        "getRequiredItem",
-        "(Lnet/minecraft/client/player/LocalPlayer;)Ljava/util/Optional;",
-        "me/aleksilassila/litematica/printer/guides/Guide",
-        "getSlotWithItem",
-        "(Lnet/minecraft/client/player/LocalPlayer;Lnet/minecraft/world/item/ItemStack;)I"),
-    /** Vanilla target (pinned Minecraft version): only needs Litematica installed. */
-    AUTO_TAKE_OUT("MinecraftMixin", LitematicaCompat.LITEMATICA_MOD_ID, "Auto Take Out");
-
-    private final String mixinName;
-    private final String modId;
-    private final String feature;
-    private final @Nullable String method;
-    private final @Nullable String methodDescriptor;
-    private final @Nullable String callOwner;
-    private final @Nullable String callName;
-    private final @Nullable String callDescriptor;
-
-    Hook(String mixinName, String modId, String feature) {
-      this(mixinName, modId, feature, null, null, null, null, null);
-    }
-
-    Hook(
-        String mixinName,
-        String modId,
-        String feature,
-        @Nullable String method,
-        @Nullable String methodDescriptor,
-        @Nullable String callOwner,
-        @Nullable String callName,
-        @Nullable String callDescriptor) {
-      this.mixinName = mixinName;
-      this.modId = modId;
-      this.feature = feature;
-      this.method = method;
-      this.methodDescriptor = methodDescriptor;
-      this.callOwner = callOwner;
-      this.callName = callName;
-      this.callDescriptor = callDescriptor;
-    }
-
-    static @Nullable Hook forMixin(String mixinClassName) {
-      for (Hook hook : values()) {
-        if (mixinClassName.equals(MIXIN_PACKAGE + hook.mixinName)) {
-          return hook;
-        }
-      }
-      return null;
-    }
-
-    /** Null when the target fits, otherwise why not. */
+  private record Shape(
+      String method,
+      String methodDescriptor,
+      String callOwner,
+      String callName,
+      String callDescriptor) {
+    /** Null when {@code target} has the method with exactly one such call, otherwise why not. */
     @Nullable String mismatch(ClassNode target) {
-      if (method == null) {
-        return null;
-      }
       for (MethodNode candidate : target.methods) {
         if (candidate.name.equals(method) && candidate.desc.equals(methodDescriptor)) {
           int calls = countCalls(candidate);
@@ -120,6 +63,88 @@ public final class LitematicaMixinPlugin implements IMixinConfigPlugin {
     }
   }
 
+  /** One hook: the mod it needs and, for mod targets, the shape of each method it injects into. */
+  private enum Hook {
+    EASY_PLACE(
+        "InventoryUtilsMixin",
+        LitematicaCompat.LITEMATICA_MOD_ID,
+        "Easy Place",
+        new Shape(
+            "schematicWorldPickBlock",
+            "(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/core/BlockPos;"
+                + "Lnet/minecraft/world/level/Level;Lnet/minecraft/client/Minecraft;)V",
+            CONFIG_BOOLEAN,
+            GET_BOOLEAN_VALUE,
+            BOOLEAN_GETTER)),
+    PRINTER(
+        "GuideMixin",
+        LitematicaCompat.PRINTER_MOD_ID,
+        "Litematica Printer",
+        new Shape(
+            "getRequiredItem",
+            "(Lnet/minecraft/client/player/LocalPlayer;)Ljava/util/Optional;",
+            "me/aleksilassila/litematica/printer/guides/Guide",
+            "getSlotWithItem",
+            "(Lnet/minecraft/client/player/LocalPlayer;Lnet/minecraft/world/item/ItemStack;)I")),
+    MATERIAL_LIST(
+        "MaterialListUtilsMixin",
+        LitematicaCompat.LITEMATICA_MOD_ID,
+        "Material list count",
+        // The count keys items as Litematica does: one ItemType per loose stack.
+        new Shape(
+            "getInventoryItemCounts",
+            "(Lnet/minecraft/world/Container;)Lit/unimi/dsi/fastutil/objects/Object2IntOpenHashMap;",
+            "fi/dy/masa/malilib/util/data/ItemType",
+            "<init>",
+            "(Lnet/minecraft/world/item/ItemStack;ZZ)V"),
+        new Shape(
+            "updateAvailableCounts",
+            "(Ljava/util/List;Lnet/minecraft/world/entity/player/Player;)V",
+            CONFIG_BOOLEAN,
+            GET_BOOLEAN_VALUE,
+            BOOLEAN_GETTER),
+        new Shape(
+            "createMaterialListFromItems",
+            "(Ljava/util/Map;Lnet/minecraft/world/entity/player/Player;)Ljava/util/List;",
+            CONFIG_BOOLEAN,
+            GET_BOOLEAN_VALUE,
+            BOOLEAN_GETTER)),
+    /** Vanilla target (pinned Minecraft version): only needs Litematica installed. */
+    AUTO_TAKE_OUT("MinecraftMixin", LitematicaCompat.LITEMATICA_MOD_ID, "Auto Take Out");
+
+    private final String mixinName;
+    private final String modId;
+    private final String feature;
+    private final List<Shape> shapes;
+
+    Hook(String mixinName, String modId, String feature, Shape... shapes) {
+      this.mixinName = mixinName;
+      this.modId = modId;
+      this.feature = feature;
+      this.shapes = List.of(shapes);
+    }
+
+    static @Nullable Hook forMixin(String mixinClassName) {
+      for (Hook hook : values()) {
+        if (mixinClassName.equals(MIXIN_PACKAGE + hook.mixinName)) {
+          return hook;
+        }
+      }
+      return null;
+    }
+
+    /** Null when every method fits, otherwise why not. */
+    @Nullable String mismatch(ClassNode target) {
+      for (Shape shape : shapes) {
+        String mismatch = shape.mismatch(target);
+        if (mismatch != null) {
+          return mismatch;
+        }
+      }
+      return null;
+    }
+  }
+
   @Override
   public void onLoad(String mixinPackage) {
     // Nothing to set up: every decision is per mixin in shouldApplyMixin.
@@ -136,7 +161,7 @@ public final class LitematicaMixinPlugin implements IMixinConfigPlugin {
     if (hook == null || !FabricLoader.getInstance().isModLoaded(hook.modId)) {
       return false;
     }
-    if (hook.method == null) {
+    if (hook.shapes.isEmpty()) {
       return true;
     }
     String mismatch;

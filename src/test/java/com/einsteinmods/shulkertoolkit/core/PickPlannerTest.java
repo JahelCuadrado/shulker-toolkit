@@ -29,12 +29,12 @@ class PickPlannerTest {
     }
 
     @Override
-    public int inventorySlots() {
+    public int sources() {
       return boxes.length;
     }
 
     @Override
-    public int boxSlots(int inventorySlot) {
+    public int slots(int inventorySlot) {
       int[] box = boxes[inventorySlot];
       return box == null ? 0 : box.length;
     }

@@ -1,26 +1,44 @@
 package com.einsteinmods.shulkertoolkit.core;
 
+import com.google.gson.annotations.SerializedName;
+
 /**
- * Where the recipe book of the crafting table and the inventory looks for ingredients besides the
- * loose inventory stacks: four levels in declaration order, each including the previous ones. The
+ * How deep crafting from boxes, the pick from boxes and Litematica's material list look besides the
+ * loose inventory stacks: three levels in declaration order, each including the previous ones. The
  * ender chest counts only while an ender chest item is in the inventory.
  *
- * <p>Saved settings store the constant name and the network the {@link #id()}, so both stay stable:
- * level 2 was added later with a new id, and a saved {@code ENDER_CHEST_BOXES} or {@code
- * BUNDLES_IN_BOXES} (levels 2 and 3 before it) now reads as levels 3 and 4, the same containers
- * plus the new loose ender chest items.
+ * <p>Saved settings store the constant name and the network the {@link #id()}, so both stay stable.
+ * The four earlier levels (ids 1-4) read as the level that now holds their containers: their saved
+ * names through the serialized alternates, their ids through {@link #fromId}.
  */
 public enum CraftDepth {
-  /** Level 1: shulker boxes in the inventory. */
-  INVENTORY_BOXES(1),
-  /** Level 2: also loose items in the ender chest. */
-  ENDER_CHEST_ITEMS(4),
-  /** Level 3: also shulker boxes in the ender chest. */
-  ENDER_CHEST_BOXES(2),
-  /** Level 4: also bundles inside the shulker boxes read (inventory and ender chest). */
-  BUNDLES_IN_BOXES(3);
+  /** Level 1: shulker boxes and bundles in the inventory. */
+  @SerializedName(
+      value = "SHALLOW",
+      alternate = {"INVENTORY_BOXES"})
+  SHALLOW(5),
+  /**
+   * Level 2: also bundles inside those boxes, and the ender chest: its loose items, shulker boxes
+   * and bundles.
+   */
+  @SerializedName(
+      value = "DEEP",
+      alternate = {"ENDER_CHEST_ITEMS", "ENDER_CHEST_BOXES"})
+  DEEP(6),
+  /** Level 3: also bundles inside the shulker boxes in the ender chest. */
+  @SerializedName(
+      value = "DEEPEST",
+      alternate = {"BUNDLES_IN_BOXES"})
+  DEEPEST(7);
 
-  public static final CraftDepth DEFAULT = INVENTORY_BOXES;
+  public static final CraftDepth DEFAULT = SHALLOW;
+
+  /** Ids of the four earlier levels, never reused; an older client may still send them. */
+  private static final int OLD_INVENTORY_BOXES_ID = 1;
+
+  private static final int OLD_ENDER_CHEST_BOXES_ID = 2;
+  private static final int OLD_BUNDLES_IN_BOXES_ID = 3;
+  private static final int OLD_ENDER_CHEST_ITEMS_ID = 4;
 
   private final int id;
 
@@ -38,13 +56,18 @@ public enum CraftDepth {
     return ordinal() >= other.ordinal();
   }
 
-  /** Unknown ids (a newer client) fall back to {@link #DEFAULT}. */
+  /** Old ids read as their new level; unknown ids (a newer client) as {@link #DEFAULT}. */
   public static CraftDepth fromId(int id) {
     for (CraftDepth depth : values()) {
       if (depth.id == id) {
         return depth;
       }
     }
-    return DEFAULT;
+    return switch (id) {
+      case OLD_INVENTORY_BOXES_ID -> SHALLOW;
+      case OLD_ENDER_CHEST_ITEMS_ID, OLD_ENDER_CHEST_BOXES_ID -> DEEP;
+      case OLD_BUNDLES_IN_BOXES_ID -> DEEPEST;
+      default -> DEFAULT;
+    };
   }
 }

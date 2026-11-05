@@ -97,6 +97,26 @@ class StorageStackingTest {
   }
 
   @Test
+  void roomIsWhatAnInsertWouldMove() {
+    String[] keys = new String[SLOTS];
+    int[] counts = new int[SLOTS];
+    Arrays.fill(keys, "dirt");
+    Arrays.fill(counts, STACK);
+    keys[3] = "stone";
+    counts[3] = 60;
+
+    assertEquals(4, box(keys, counts, false, StorageGrid.NO_ITEM).room("stone", STACK));
+    assertEquals(0, box(keys, counts, false, StorageGrid.NO_ITEM).room("dirt", STACK));
+    assertEquals(1, box(keys, counts, true, StorageGrid.NO_ITEM).room("stone", STACK));
+    assertEquals(0, box(keys, counts, false, StorageGrid.NO_ITEM).room("stone", 0));
+
+    keys[SLOTS - 1] = null;
+    counts[SLOTS - 1] = 0;
+    assertEquals(STACK, box(keys, counts, false, StorageGrid.NO_ITEM).room("stone", STACK));
+    assertEquals(5, box(keys, counts, false, StorageGrid.NO_ITEM).room("gold", 5));
+  }
+
+  @Test
   void aFullContainerTakesNothingAndDropsTheSelection() {
     String[] keys = new String[SLOTS];
     int[] counts = new int[SLOTS];

@@ -8,7 +8,9 @@
     "fabric-gametest": [
       "com.einsteinmods.shulkertoolkit.gametest.AutoRefillGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.CraftFromBoxesGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.EnderChestSafetyGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.EnderChestSyncGameTest",
+      "com.einsteinmods.shulkertoolkit.gametest.PickDepthGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.PickFromShulkerGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.PickupIntoBoxesGameTest",
       "com.einsteinmods.shulkertoolkit.gametest.PinnedWindowClicksGameTest",
@@ -18,6 +20,8 @@
       "com.einsteinmods.shulkertoolkit.gametest.TakeOutRequestGameTest"
     ],
     "fabric-client-gametest": [
+      "com.einsteinmods.shulkertoolkit.client.storage.EmptyBoxTooltipClientGameTest",
+      "com.einsteinmods.shulkertoolkit.client.storage.EnderChestClicksClientGameTest",
       "com.einsteinmods.shulkertoolkit.client.storage.PinnedStationsClientGameTest"
     ]
   },

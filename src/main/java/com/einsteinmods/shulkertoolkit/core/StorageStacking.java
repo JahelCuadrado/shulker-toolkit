@@ -156,6 +156,26 @@ public final class StorageStacking<K> {
   }
 
   /**
+   * How many of {@code acceptable} items of {@code incoming} {@link #tryInsert} would move in (one
+   * at most with single item movement): the room on stacks of the same kind, or all of them with an
+   * empty slot, which takes whatever is left.
+   */
+  public int room(K incoming, int acceptable) {
+    int limit = singleItem ? Math.min(1, acceptable) : acceptable;
+    int room = 0;
+    for (int slot = 0; slot < counts.length && room < limit; slot++) {
+      K key = keys.get(slot);
+      if (key == null) {
+        return limit;
+      }
+      if (sameKind.test(key, incoming)) {
+        room += Math.max(0, maxCount.applyAsInt(key) - counts[slot]);
+      }
+    }
+    return Math.min(room, limit);
+  }
+
+  /**
    * Takes the stack (one item with single item movement) a click extracts: the selected slot when
    * it holds something {@code other} can join, else the first such slot in extraction order.
    *

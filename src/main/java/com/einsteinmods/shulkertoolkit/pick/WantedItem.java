@@ -28,6 +28,11 @@ public record WantedItem(Holder<Item> item, DataComponentPatch components, int m
     return new WantedItem(stack.typeHolder(), stack.getComponentsPatch(), stack.getMaxStackSize());
   }
 
+  /** The item in a container slot. */
+  public static WantedItem of(ItemStackTemplate template) {
+    return new WantedItem(template.item(), template.components(), template.getMaxStackSize());
+  }
+
   /**
    * What a stack that just ran out (count 0) was, or null for the shared empty stack. Vanilla
    * getters report air once the count is 0, so this reads the stack's fields.
@@ -50,6 +55,11 @@ public record WantedItem(Holder<Item> item, DataComponentPatch components, int m
   /** Vanilla {@code ItemStack#isSameItemSameComponents}, without creating a stack per slot. */
   public boolean matches(ItemStackTemplate slot) {
     return slot.item().value() == item.value() && slot.components().equals(components);
+  }
+
+  /** The same rule for a loose stack; its component patch is built only for the same item. */
+  public boolean matches(ItemStack stack) {
+    return stack.getItem() == item.value() && stack.getComponentsPatch().equals(components);
   }
 
   /** A new stack of this item. */

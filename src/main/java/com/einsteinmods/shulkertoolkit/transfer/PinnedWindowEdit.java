@@ -1,7 +1,13 @@
 package com.einsteinmods.shulkertoolkit.transfer;
 
+import com.einsteinmods.shulkertoolkit.core.StorageGrid;
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.entity.SlotAccess;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.ClickAction;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.component.BundleContents;
@@ -60,11 +66,14 @@ final class PinnedWindowEdit {
 
   /**
    * Vanilla {@code AbstractContainerMenu#doClick} with {@code PICKUP}: take all or half, place all
-   * or one, merge or swap. Bundles insert the cursor stack wherever the window is clicked.
+   * or one, merge or swap. Bundles insert the cursor stack wherever the window is clicked. A right
+   * click on a shulker box or bundle in a slot works on its contents instead ({@link #editInside}).
    *
+   * @param selected the client's selection inside the clicked slot's item
+   * @param transferAllowed the server's policy lets items move into and out of container items
    * @return false when {@code index} is not a slot of this window
    */
-  boolean pickup(int index, boolean primary) {
+  boolean pickup(int index, boolean primary, int selected, Player player, boolean transferAllowed) {
     if (kind == StorageKind.BUNDLE) {
       return pickupBundle(index, primary);
     }
@@ -72,6 +81,9 @@ final class PinnedWindowEdit {
       return false;
     }
     ItemStack clicked = slots.get(index);
+    if (!primary && transferAllowed && editInside(index, clicked, selected, player)) {
+      return true;
+    }
     if (clicked.isEmpty()) {
       if (!carried.isEmpty() && mayPlace(carried)) {
         int placed = Math.min(primary ? carried.getCount() : 1, StorageKind.maxCount(carried));
@@ -96,6 +108,37 @@ final class PinnedWindowEdit {
         carried = previous;
       }
     }
+    return true;
+  }
+
+  /**
+   * A right click on the shulker box or bundle in slot {@code index}, as on a menu slot ({@link
+   * StorageClicks#otherStackedOnMe}): takes a stack out or puts the cursor stack in, on a slot of
+   * its own whose item goes back to the window. Takes the stack the client selected with the wheel
+   * over that slot (else the default one). Not an ender chest, whose contents are not in the
+   * window.
+   *
+   * @return false when the click stays a plain pickup
+   */
+  private boolean editInside(int index, ItemStack clicked, int selected, Player player) {
+    StorageKind clickedKind = StorageKind.of(clicked);
+    // A held container item decides, as on a menu slot; the window cannot let it act.
+    if (clickedKind == null
+        || StorageKind.of(carried) != null
+        || clickedKind == StorageKind.ENDER_CHEST
+        || !clickedKind.allowModification(clicked)
+        || !TransferGate.allowsKind(player, clickedKind)) {
+      return false;
+    }
+    Slot cell = new Slot(new SimpleContainer(clicked), 0, 0, 0);
+    SlotAccess cursor = SlotAccess.of(() -> carried, stack -> carried = stack);
+    boolean known = selected >= 0 && selected < clickedKind.items(clicked, player).size();
+    StorageStates.of(player).setSelectedItem(known ? selected : StorageGrid.NO_ITEM);
+    if (!StorageClicks.otherStackedOnMe(
+        clickedKind, clicked, carried, cell, ClickAction.SECONDARY, player, cursor)) {
+      return false;
+    }
+    set(index, cell.getItem());
     return true;
   }
 

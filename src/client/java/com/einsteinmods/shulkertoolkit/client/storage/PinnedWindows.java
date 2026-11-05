@@ -1,23 +1,32 @@
 package com.einsteinmods.shulkertoolkit.client.storage;
 
+import com.einsteinmods.shulkertoolkit.ShulkerToolkit;
 import com.einsteinmods.shulkertoolkit.client.ClientShulkerState;
 import com.einsteinmods.shulkertoolkit.client.mixin.AbstractContainerScreenAccessor;
 import com.einsteinmods.shulkertoolkit.client.mixin.AbstractRecipeBookScreenAccessor;
 import com.einsteinmods.shulkertoolkit.core.PinnedAction;
 import com.einsteinmods.shulkertoolkit.core.PinnedLayout;
 import com.einsteinmods.shulkertoolkit.core.PinnedPaths;
+import com.einsteinmods.shulkertoolkit.core.StorageGrid;
+import com.einsteinmods.shulkertoolkit.core.StorageStacking;
 import com.einsteinmods.shulkertoolkit.network.PinnedWindowClickPayload;
 import com.einsteinmods.shulkertoolkit.transfer.PinnedWindowClicks;
 import com.einsteinmods.shulkertoolkit.transfer.StorageKind;
+import com.einsteinmods.shulkertoolkit.transfer.StorageStates;
+import com.einsteinmods.shulkertoolkit.transfer.TransferGate;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.util.Arrays;
+import java.util.Optional;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.ScrollWheelHandler;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractFurnaceScreen;
@@ -36,6 +45,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Util;
@@ -43,6 +53,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import org.joml.Vector2i;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -51,11 +62,15 @@ import org.jspecify.annotations.Nullable;
  * screen, up to the player's maximum ({@link PinnedPaths#MAX_DEPTH} at most) at once, also from
  * inside another window; middle click on it again or on the window title unpins it, closing the
  * screen removes them all (a switch to another supported screen keeps the ones whose box is in the
- * player's inventory). Clicks in a window, Shift-clicks from the inventory into the last window
- * used and number keys over a window slot each send one {@link PinnedWindowClickPayload}; the
- * server applies them and vanilla's menu sync shows the result (no prediction). Every hook costs
- * one check while nothing is pinned; with windows, a frame resolves each window (a few comparisons
- * per level) and draws it without allocating. Render and client thread only.
+ * player's inventory). An item with its window open shows no tooltip view: its selection and right
+ * clicks work through the window (every ender chest, with an ender window: they all show the same
+ * contents), and those contents open once: a second ender window, or one over the ender chest's own
+ * menu, shows a short notice instead, a frame check while none shows. Clicks in a window,
+ * Shift-clicks from the inventory into the last window used and number keys over a window slot each
+ * send one {@link PinnedWindowClickPayload}; the server applies them and vanilla's menu sync shows
+ * the result (no prediction). Every hook costs one check while nothing is pinned; with windows, a
+ * frame resolves each window (a few comparisons per level) and draws it without allocating. Render
+ * and client thread only.
  */
 public final class PinnedWindows {
 
@@ -72,6 +87,17 @@ public final class PinnedWindows {
   private static final float BUNDLE_PITCH_RANGE = 0.4F;
 
   private static final int NONE = -1;
+
+  /** How far past the container's right edge a widget still counts as beside it. */
+  private static final int BUTTON_REACH = 32;
+
+  private static final Component ALREADY_OPEN =
+      Component.translatable("tooltip." + ShulkerToolkit.MOD_ID + ".ender_chest_already_open");
+
+  private static final long NOTICE_MILLIS = 2000L;
+  private static final int NOTICE_COLOR = 0xFFFFFFFF;
+  private static final int NOTICE_GAP = 12;
+  private static final int NOTICE_MARGIN = 2;
 
   /**
    * How long pins wait for the next screen after one is removed without the player closing it: a
@@ -94,6 +120,12 @@ public final class PinnedWindows {
   private static int focused = NONE;
   private static int hoveredWindow = NONE;
   private static int hoveredCell = PinnedWindow.NO_CELL;
+
+  /** The cell hovered last frame, whose item's selection the wheel moved. */
+  private static int lastWindow = NONE;
+
+  private static int lastCell = PinnedWindow.NO_CELL;
+  private static final ScrollWheelHandler WHEEL = new ScrollWheelHandler();
   private static boolean pressConsumed;
   private static boolean layoutDirty;
   private static int laidLeft;
@@ -107,6 +139,9 @@ public final class PinnedWindows {
 
   private static boolean pending;
   private static long pendingUntil;
+
+  private static boolean noticeShown;
+  private static long noticeStart;
 
   private PinnedWindows() {}
 
@@ -142,7 +177,7 @@ public final class PinnedWindows {
     if (screen != containerScreen) {
       if (pending && Util.getMillis() <= pendingUntil) {
         pending = false;
-        carryOver(containerScreen.getMenu());
+        carryOver(containerScreen);
       } else {
         clear();
       }
@@ -156,6 +191,9 @@ public final class PinnedWindows {
         .register((current, event) -> !onMouseReleased());
     ScreenMouseEvents.allowMouseDrag(containerScreen)
         .register((current, event, dragX, dragY) -> !pressConsumed);
+    ScreenMouseEvents.allowMouseScroll(containerScreen)
+        .register(
+            (current, mouseX, mouseY, scrollX, scrollY) -> !onMouseScrolled(scrollX, scrollY));
     ScreenKeyboardEvents.allowKeyPress(containerScreen)
         .register((current, event) -> !onKeyPressed(event));
     ScreenEvents.afterForeground(containerScreen)
@@ -209,21 +247,27 @@ public final class PinnedWindows {
     pendingUntil = Util.getMillis() + SWITCH_MILLIS;
     screen = null;
     access = null;
+    noticeShown = false;
     focused = NONE;
     hoveredWindow = NONE;
     hoveredCell = PinnedWindow.NO_CELL;
     pressConsumed = false;
   }
 
-  /** Puts the waiting windows on {@code menu}'s slots for the same inventory slots. */
-  private static void carryOver(AbstractContainerMenu menu) {
+  /**
+   * Puts the waiting windows on the slots of {@code next}'s menu for the same inventory slots. An
+   * ender window does not enter the ender menu, which shows the same contents.
+   */
+  private static void carryOver(AbstractContainerScreen<?> next) {
     LocalPlayer player = Minecraft.getInstance().player;
     if (player == null) {
       return;
     }
+    AbstractContainerMenu menu = next.getMenu();
+    boolean enderMenu = EnderMenuScreen.shows(next);
     for (int index = 0; index < count; index++) {
       Slot slot = PinnedWindowClicks.inventorySlot(player, menu, PENDING_ROOTS[index]);
-      if (slot == null) {
+      if (slot == null || (enderMenu && WINDOWS[index].kind() == StorageKind.ENDER_CHEST)) {
         PENDING_ROOTS[index] = NONE;
       } else {
         WINDOWS[index].reroot(slot.index);
@@ -247,6 +291,36 @@ public final class PinnedWindows {
     return false;
   }
 
+  /**
+   * Whether {@code stack}'s contents are already open in a window: {@code stack} itself or, for an
+   * ender chest, any ender window. One field read while none is pinned. Asked from {@code
+   * ItemStack#getTooltipImage}, also off the render thread (creative search trees), where no window
+   * is read.
+   */
+  public static boolean locks(ItemStack stack) {
+    if (count == 0 || !Minecraft.getInstance().isSameThread()) {
+      return false;
+    }
+    boolean enderChest = StorageKind.of(stack) == StorageKind.ENDER_CHEST;
+    for (int index = 0; index < count; index++) {
+      PinnedWindow window = WINDOWS[index];
+      if (window.stack() == stack || (enderChest && window.kind() == StorageKind.ENDER_CHEST)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Where the first window went on the screen. */
+  static int firstWindowX() {
+    return LAID_X[0];
+  }
+
+  /** Whether the notice shows: a middle click found the ender menu already open. */
+  static boolean isNoticeShown() {
+    return noticeShown;
+  }
+
   private static boolean enabled() {
     ClientShulkerState state = StorageInput.state();
     return state != null
@@ -256,6 +330,9 @@ public final class PinnedWindows {
 
   /** After the screen's slots (and recipe book), before the cursor item and tooltips. */
   private static void extract(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+    if (noticeShown) {
+      extractNotice(graphics);
+    }
     if (count == 0) {
       return;
     }
@@ -280,6 +357,10 @@ public final class PinnedWindows {
     layout(current, font);
     hoveredWindow = NONE;
     hoveredCell = PinnedWindow.NO_CELL;
+    AbstractContainerScreenAccessor screenAccess = access;
+    Slot hoveredSlot = screenAccess == null ? null : screenAccess.shulkertoolkit$hoveredSlot();
+    ItemStack hoveredStack = hoveredSlot == null ? ItemStack.EMPTY : hoveredSlot.getItem();
+    int selected = StorageStates.of(player).selectedItem();
     for (int index = 0; index < count; index++) {
       if (WINDOWS[index].contains(font, mouseX, mouseY)) {
         hoveredWindow = index;
@@ -287,11 +368,29 @@ public final class PinnedWindows {
         focused = index;
       }
     }
+    if (hoveredWindow != lastWindow || hoveredCell != lastCell) {
+      // Leaving a cell drops the selection made in its item, as leaving a menu slot does.
+      if (lastCell != PinnedWindow.NO_CELL) {
+        StorageStates.of(player).setSelectedItem(StorageGrid.NO_ITEM);
+        selected = StorageGrid.NO_ITEM;
+      }
+      lastWindow = hoveredWindow;
+      lastCell = hoveredCell;
+    }
+    int hoveredChild = childAt(hoveredWindow, hoveredCell);
     for (int index = 0; index < count; index++) {
       PinnedWindow window = WINDOWS[index];
       if (window.visible()) {
         window.beginDraw(graphics);
-        window.extract(graphics, font, index == hoveredWindow ? hoveredCell : PinnedWindow.NO_CELL);
+        int marked;
+        if (index == hoveredWindow) {
+          marked = hoveredCell;
+        } else if (index == hoveredChild) {
+          marked = selected >= 0 ? selected : PinnedWindow.NO_CELL;
+        } else {
+          marked = drivenCell(window, hoveredStack, selected);
+        }
+        window.extract(graphics, font, marked);
         extractChildEyes(graphics, window);
         window.endDraw(graphics);
       }
@@ -299,16 +398,60 @@ public final class PinnedWindows {
     if (hoveredCell != PinnedWindow.NO_CELL && menu.getCarried().isEmpty()) {
       ItemStack stack = WINDOWS[hoveredWindow].stackAt(hoveredCell);
       if (!stack.isEmpty()) {
-        // Vanilla's hovered-slot tooltip (AbstractContainerScreen#extractTooltip) builds the same.
+        // Vanilla's hovered-slot tooltip (AbstractContainerScreen#extractTooltip) builds the same;
+        // no contents view when the item's own window is open.
         graphics.setTooltipForNextFrame(
             font,
             Screen.getTooltipFromItem(Minecraft.getInstance(), stack),
-            stack.getTooltipImage(),
+            hoveredChild == NONE ? stack.getTooltipImage() : Optional.empty(),
             mouseX,
             mouseY,
             stack.get(DataComponents.TOOLTIP_STYLE));
       }
     }
+  }
+
+  /** Above the menu, so it reads over the screen's dimmed background. */
+  private static void extractNotice(GuiGraphicsExtractor graphics) {
+    AbstractContainerScreen<?> current = screen;
+    AbstractContainerScreenAccessor screenAccess = access;
+    if (current == null
+        || screenAccess == null
+        || Util.getMillis() - noticeStart >= NOTICE_MILLIS) {
+      noticeShown = false;
+      return;
+    }
+    int y = Math.max(NOTICE_MARGIN, screenAccess.shulkertoolkit$topPos() - NOTICE_GAP);
+    graphics.centeredText(current.getFont(), ALREADY_OPEN, current.width / 2, y, NOTICE_COLOR);
+  }
+
+  /**
+   * The cell marked in {@code window} while the mouse is on a menu slot holding its item (any ender
+   * chest, for an ender window): the item's selection, which the wheel moves there instead of in a
+   * tooltip.
+   */
+  private static int drivenCell(PinnedWindow window, ItemStack hovered, int selected) {
+    boolean drives =
+        window.stack() == hovered
+            || (window.kind() == StorageKind.ENDER_CHEST
+                && StorageKind.of(hovered) == StorageKind.ENDER_CHEST);
+    return drives && selected >= 0 ? selected : PinnedWindow.NO_CELL;
+  }
+
+  /** The window pinned on the item in {@code cell} of window {@code parentIndex}, or none. */
+  private static int childAt(int parentIndex, int cell) {
+    if (parentIndex == NONE || cell == PinnedWindow.NO_CELL) {
+      return NONE;
+    }
+    PinnedWindow parent = WINDOWS[parentIndex];
+    for (int index = 0; index < count; index++) {
+      PinnedWindow child = WINDOWS[index];
+      if (PinnedPaths.isChild(parent.path(), parent.depth(), child.path(), child.depth())
+          && child.path()[parent.depth()] == cell) {
+        return index;
+      }
+    }
+    return NONE;
   }
 
   /** Eyes over the boxes inside {@code window} whose own windows are pinned. */
@@ -350,18 +493,18 @@ public final class PinnedWindows {
     if (!changed) {
       return;
     }
+    int right = left + screenAccess.shulkertoolkit$imageWidth();
+    int bottom = top + screenAccess.shulkertoolkit$imageHeight();
     // Beside the container, unless the recipe book takes its left: then above and below it.
-    boolean rows = recipeBook && !StorageInput.preferences().pinnedWindowsAlwaysRight();
     int scale =
         PinnedLayout.placeScaled(
             current.width,
             current.height,
             left,
             top,
-            left + screenAccess.shulkertoolkit$imageWidth(),
-            top + screenAccess.shulkertoolkit$imageHeight(),
-            !recipeBook,
-            rows,
+            clearOfButtons(current, right, top, bottom),
+            bottom,
+            recipeBook,
             count,
             WIDTHS,
             HEIGHTS,
@@ -378,6 +521,27 @@ public final class PinnedWindows {
     laidWidth = current.width;
     laidHeight = current.height;
     laidRecipeBook = recipeBook;
+  }
+
+  /**
+   * The container's right edge past any button other mods hang on it, as Inventory Management's
+   * sort buttons (where they go is the player's setting, so they are read, not assumed). A widget
+   * further out is not beside the container. One pass over the widgets, on layout changes only.
+   */
+  private static int clearOfButtons(
+      AbstractContainerScreen<?> current, int right, int top, int bottom) {
+    int edge = right;
+    for (GuiEventListener child : current.children()) {
+      if (child instanceof AbstractWidget widget
+          && widget.visible
+          && widget.getRight() > right
+          && widget.getX() <= right + BUTTON_REACH
+          && widget.getBottom() > top
+          && widget.getY() < bottom) {
+        edge = Math.max(edge, widget.getRight());
+      }
+    }
+    return edge;
   }
 
   private static boolean onMouseClicked(MouseButtonEvent event) {
@@ -436,6 +600,54 @@ public final class PinnedWindows {
       }
     }
     return false;
+  }
+
+  /**
+   * The wheel over a shulker box or bundle in a window slot moves the selection inside it, shown in
+   * its tooltip, as over a menu slot ({@code StorageMouseActions#onMouseScrolled}); a right click
+   * then takes that stack. Not an ender chest, whose contents are not in the window.
+   *
+   * @return true when the wheel was used
+   */
+  private static boolean onMouseScrolled(double scrollX, double scrollY) {
+    LocalPlayer player = Minecraft.getInstance().player;
+    if (count == 0
+        || player == null
+        || hoveredWindow == NONE
+        || hoveredCell == PinnedWindow.NO_CELL
+        || !StorageInput.contentsShown()) {
+      return false;
+    }
+    ItemStack stack = WINDOWS[hoveredWindow].stackAt(hoveredCell);
+    StorageKind kind = StorageKind.of(stack);
+    if (kind == null
+        || kind == StorageKind.ENDER_CHEST
+        || !kind.viewable(stack)
+        || !kind.hasContents(stack, player)
+        || !TransferGate.allowsKind(player, kind)) {
+      return false;
+    }
+    Vector2i wheelXY = WHEEL.onMouseScroll(scrollX, scrollY);
+    int wheel = wheelXY.y == 0 ? -wheelXY.x : wheelXY.y;
+    if (wheel == 0) {
+      return true;
+    }
+    boolean vertical = StorageInput.isHeld(StorageInput.preferences().verticalTooltipScrolling());
+    StorageStacking<ItemStack> view = kind.view(stack, player);
+    int previous = StorageStates.of(player).selectedItem();
+    int updated =
+        StorageGrid.scroll(
+            previous,
+            kind.columns(view.size()),
+            kind.rows(view.size()),
+            view.size(),
+            slot -> view.key(slot) != null,
+            vertical ? 0 : -wheel,
+            vertical ? -wheel : 0);
+    if (updated != previous) {
+      kind.toggleSelectedItem(stack, player, updated, false);
+    }
+    return true;
   }
 
   /** A release after a press the windows took: vanilla would drop the cursor stack outside. */
@@ -534,7 +746,7 @@ public final class PinnedWindows {
     ClientShulkerState state = StorageInput.state();
     if (kind == null
         || state == null
-        || !kind.allowModification(stack)
+        || !kind.viewable(stack)
         || (kind == StorageKind.ENDER_CHEST && !state.enderPreviewAllowed())) {
       return false;
     }
@@ -543,6 +755,11 @@ public final class PinnedWindows {
         remove(index);
         return true;
       }
+    }
+    if (kind == StorageKind.ENDER_CHEST && (EnderMenuScreen.shows(current) || locks(stack))) {
+      noticeShown = true;
+      noticeStart = Util.getMillis();
+      return true;
     }
     if (count >= StorageInput.preferences().maxPinnedWindows()) {
       return true;
@@ -633,7 +850,12 @@ public final class PinnedWindows {
     if (ClientPlayNetworking.canSend(PinnedWindowClickPayload.TYPE)) {
       ClientPlayNetworking.send(
           new PinnedWindowClickPayload(
-              current.getMenu().containerId, window.payloadLevels(), action, slot, button));
+              current.getMenu().containerId,
+              window.payloadLevels(),
+              action,
+              slot,
+              button,
+              StorageStates.of(player).selectedItem()));
     }
   }
 
@@ -692,11 +914,16 @@ public final class PinnedWindows {
     }
     hoveredWindow = NONE;
     hoveredCell = PinnedWindow.NO_CELL;
+    lastWindow = NONE;
+    lastCell = PinnedWindow.NO_CELL;
     layoutDirty = true;
   }
 
   private static void clear() {
     pending = false;
+    lastWindow = NONE;
+    lastCell = PinnedWindow.NO_CELL;
+    noticeShown = false;
     Arrays.fill(WINDOWS, null);
     count = 0;
     focused = NONE;

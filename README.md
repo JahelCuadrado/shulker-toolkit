@@ -7,35 +7,46 @@ Fabric mod for Minecraft 26.3.
 
 ## Features
 - **See inside from the tooltip:** hover a shulker box to see its 27 slots in a chest-style window
-  tinted with the box's colour, with the name of the selected item. Your ender chest shows its
-  contents over an End starfield, and bundles can show a leather panel. Choose when contents show:
-  always, never, while holding a key or with a toggle key.
+  tinted with the box's colour, with the name of the selected item. Turn on ender chest
+  interactions to see your ender chest's contents over an End starfield (a stack of ender chests
+  too), and bundle interactions for a leather panel on bundles. Choose when contents show: always,
+  never, while holding a key or with a toggle key. Optionally, empty boxes show their empty grid
+  too.
 - **Move items without placing the box:** right-click to put items in or take them out (or split
   it like vanilla bundles: left click puts in, right click takes out), drag across slots to fill or
   empty several at once, hold `Ctrl`/`Cmd` to move one item at a time and use the mouse wheel to
-  pick the slot you want. Works with your ender chest too, and with bundles if you turn them on.
+  pick the slot you want. Works with your ender chest and with bundles if you turn them on (off by
+  default), in any slot, also inside a chest or your open ender chest. Your ender chest takes
+  anything its real inventory does, shulker boxes included. On a stack of ender chests, right click
+  splits it as usual, or takes out the item you chose with the wheel.
 - **Look inside boxes inside boxes:** select a box or bundle in a tooltip and press Enter or Space
   to peek inside it.
 - **Know at a glance:** box icons show a fill bar, and a green **+** when the box already holds the
   item you carry and has room for more.
-- **Middle-click windows:** middle-click a shulker box, a bundle or your ender chest to open its
-  window next to your inventory, a crafting table, a chest, a furnace or a work station
+- **Middle-click windows:** middle-click a shulker box, a bundle or your ender chest (even a stack of
+  them) to open its window next to your inventory, a crafting table, a chest, a furnace or a work station
   (stonecutter, loom, cartography table, smithing table, grindstone, anvil), and use it like a
   chest. Open up to 6 at once, beside the screen or above and below the recipe book, each with its
   own opening sound; on small screens they shrink to fit. They stay open when you go straight from
   one of these screens to another (for example between work stations with Handy Tables). An eye
-  marks the boxes that are open. In creative, hold `Ctrl` while middle-clicking.
+  marks the boxes that are open. With a window open, the wheel and right click on its box work
+  through the window, and right click on a box or bundle inside a window takes items out of it or
+  puts them in. Windows keep clear of the sort buttons other mods add beside the screen. In
+  creative, hold `Ctrl` while middle-clicking.
 - **Craft from your boxes:** the recipe book counts the materials inside your shulker boxes and
-  takes them out for you. Four depth levels: the boxes in your inventory, then your ender chest,
-  the boxes inside it and the bundles inside those boxes.
+  takes them out for you.
 - **Pick block from your boxes:** middle-click a block you only have inside a shulker box and you
   get it in your hand: one block or a full stack, your choice.
+- **Choose how deep to look:** one setting for crafting, pick block and Litematica, with three
+  levels: the boxes and bundles in your inventory; then the bundles inside those boxes and
+  everything in your ender chest; then the bundles inside the boxes in your ender chest.
 - **Auto refill:** when the stack in your hand runs out (blocks, food, potions), it refills from
   your shulker boxes.
 - **Pick up into boxes (optional, off by default):** send items into your boxes when your inventory
   is full, or straight into the box that already holds them.
 - **Build schematics from boxes:** Litematica Easy Place, manual placement and the Litematica
-  Printer take the blocks they need out of your shulker boxes.
+  Printer take the blocks they need out of your shulker boxes, and the material list counts what
+  your boxes hold as available.
 - **Simple settings screen** with no extra libraries (Mod Menu supported), plus keys to switch
   the main options on the fly.
 - **Lightweight:** no noticeable impact on performance.

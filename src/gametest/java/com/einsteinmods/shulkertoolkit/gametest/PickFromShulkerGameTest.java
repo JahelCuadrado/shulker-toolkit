@@ -1,5 +1,6 @@
 package com.einsteinmods.shulkertoolkit.gametest;
 
+import com.einsteinmods.shulkertoolkit.core.CraftScope;
 import com.einsteinmods.shulkertoolkit.core.PickMode;
 import com.einsteinmods.shulkertoolkit.core.PlayerPreferences;
 import com.einsteinmods.shulkertoolkit.core.ServerPolicy;
@@ -187,7 +188,8 @@ public final class PickFromShulkerGameTest {
 
     pickStone(helper, player);
     ShulkerPick.TakeOutResult direct =
-        ShulkerPick.takeOut(player, new ItemStack(Items.STONE), PickMode.FULL_STACK);
+        ShulkerPick.takeOut(
+            player, new ItemStack(Items.STONE), PickMode.FULL_STACK, CraftScope.INVENTORY);
 
     helper.assertTrue(
         direct.status() == ShulkerPick.Status.NO_ROOM, "a full inventory must refuse the pick");
@@ -209,7 +211,8 @@ public final class PickFromShulkerGameTest {
     }
 
     ShulkerPick.TakeOutResult result =
-        ShulkerPick.takeOut(player, new ItemStack(Items.STONE), PickMode.FULL_STACK);
+        ShulkerPick.takeOut(
+            player, new ItemStack(Items.STONE), PickMode.FULL_STACK, CraftScope.INVENTORY);
 
     helper.assertTrue(result.succeeded(), "there is one free slot for the box");
     helper.assertTrue(

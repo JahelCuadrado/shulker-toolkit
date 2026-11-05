@@ -1,6 +1,7 @@
 package com.einsteinmods.shulkertoolkit.client.mixin;
 
 import com.einsteinmods.shulkertoolkit.client.storage.CollapsibleTooltip;
+import com.einsteinmods.shulkertoolkit.client.storage.PinnedWindows;
 import com.einsteinmods.shulkertoolkit.client.storage.StorageTooltips;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import java.util.Optional;
@@ -24,14 +25,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * here first replaces both, as Easy Shulker Boxes does. Also drops vanilla's text list of a shulker
  * box's contents ("Stone x64", "and 3 more..."), which {@code ItemStack#addDetailsToTooltip} adds
  * through {@code addToTooltip(DataComponents.CONTAINER, ...)}; every other component's call is kept
- * (one reference comparison each).
+ * (one reference comparison each). An item whose window is open shows no contents at all.
  */
 @Mixin(ItemStack.class)
 abstract class ItemStackMixin {
   @Inject(method = "getTooltipImage", at = @At("HEAD"), cancellable = true)
   private void shulkertoolkit$contentsTooltip(
       CallbackInfoReturnable<Optional<TooltipComponent>> cir) {
-    CollapsibleTooltip tooltip = StorageTooltips.imageFor((ItemStack) (Object) this);
+    ItemStack stack = (ItemStack) (Object) this;
+    if (PinnedWindows.locks(stack)) {
+      cir.setReturnValue(Optional.empty());
+      return;
+    }
+    CollapsibleTooltip tooltip = StorageTooltips.imageFor(stack);
     if (tooltip != null) {
       cir.setReturnValue(tooltip.image());
     }

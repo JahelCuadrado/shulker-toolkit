@@ -10,9 +10,12 @@ import org.junit.jupiter.api.Test;
 
 class CraftScopeTest {
   private static final int UNKNOWN_ID = 99;
-  private static final int OLD_LEVEL_ONE_ID = 1;
-  private static final int OLD_LEVEL_TWO_ID = 2;
-  private static final int OLD_LEVEL_THREE_ID = 3;
+  private static final int OLD_INVENTORY_BOXES_ID = 1;
+  private static final int OLD_ENDER_CHEST_BOXES_ID = 2;
+  private static final int OLD_BUNDLES_IN_BOXES_ID = 3;
+  private static final int OLD_ENDER_CHEST_ITEMS_ID = 4;
+  private static final boolean CARRIED = true;
+  private static final boolean NOT_CARRIED = false;
 
   @Test
   void offWhenTheServerForbidsItOrThePlayerTurnedItOff() {
@@ -24,56 +27,73 @@ class CraftScopeTest {
 
   @Test
   void eachDepthAddsItsContainers() {
+    assertEquals(CraftScope.INVENTORY, CraftScope.resolve(true, true, CraftDepth.SHALLOW, true));
     assertEquals(
-        CraftScope.INVENTORY_BOXES,
-        CraftScope.resolve(true, true, CraftDepth.INVENTORY_BOXES, true));
+        CraftScope.WITH_ENDER_CHEST, CraftScope.resolve(true, true, CraftDepth.DEEP, true));
     assertEquals(
-        CraftScope.WITH_ENDER_CHEST_ITEMS,
-        CraftScope.resolve(true, true, CraftDepth.ENDER_CHEST_ITEMS, true));
-    assertEquals(
-        CraftScope.WITH_ENDER_CHEST_BOXES,
-        CraftScope.resolve(true, true, CraftDepth.ENDER_CHEST_BOXES, true));
-    assertEquals(
-        CraftScope.WITH_ENDER_CHEST_BOXES_AND_BUNDLES,
-        CraftScope.resolve(true, true, CraftDepth.BUNDLES_IN_BOXES, true));
+        CraftScope.WITH_ENDER_CHEST_BUNDLES_IN_BOXES,
+        CraftScope.resolve(true, true, CraftDepth.DEEPEST, true));
   }
 
   @Test
   void withoutTheEnderChestPreviewTheEnderChestIsSkipped() {
+    assertEquals(CraftScope.INVENTORY, CraftScope.resolve(true, true, CraftDepth.SHALLOW, false));
     assertEquals(
-        CraftScope.INVENTORY_BOXES,
-        CraftScope.resolve(true, true, CraftDepth.ENDER_CHEST_ITEMS, false));
+        CraftScope.WITH_BUNDLES_IN_BOXES, CraftScope.resolve(true, true, CraftDepth.DEEP, false));
     assertEquals(
-        CraftScope.INVENTORY_BOXES,
-        CraftScope.resolve(true, true, CraftDepth.ENDER_CHEST_BOXES, false));
+        CraftScope.WITH_BUNDLES_IN_BOXES,
+        CraftScope.resolve(true, true, CraftDepth.DEEPEST, false));
+  }
+
+  /** Level 1: inventory containers; level 2: one level further in; level 3: the deepest. */
+  @Test
+  void eachScopeReadsItsSources() {
+    assertEquals(StorageSource.INVENTORY_CONTAINER, CraftScope.INVENTORY.deepest(CARRIED));
     assertEquals(
-        CraftScope.WITH_BUNDLES,
-        CraftScope.resolve(true, true, CraftDepth.BUNDLES_IN_BOXES, false));
+        StorageSource.BUNDLE_IN_INVENTORY_BOX, CraftScope.WITH_BUNDLES_IN_BOXES.deepest(CARRIED));
+    assertEquals(StorageSource.ENDER_CHEST_CONTAINER, CraftScope.WITH_ENDER_CHEST.deepest(CARRIED));
+    assertEquals(
+        StorageSource.BUNDLE_IN_ENDER_CHEST_BOX,
+        CraftScope.WITH_ENDER_CHEST_BUNDLES_IN_BOXES.deepest(CARRIED));
+  }
+
+  @Test
+  void theEnderChestNeedsAnEnderChestItem() {
+    for (CraftScope scope : CraftScope.values()) {
+      assertFalse(scope.deepest(NOT_CARRIED).inEnderChest(), scope.name());
+    }
+    assertFalse(CraftScope.INVENTORY.readsEnderChest());
+    assertFalse(CraftScope.WITH_BUNDLES_IN_BOXES.readsEnderChest());
+    assertTrue(CraftScope.WITH_ENDER_CHEST.readsEnderChest());
+    assertTrue(CraftScope.WITH_ENDER_CHEST_BUNDLES_IN_BOXES.readsEnderChest());
   }
 
   @Test
   void levelsAreInOrderAndEachIncludesThePreviousOnes() {
-    CraftDepth[] levels = {
-      CraftDepth.INVENTORY_BOXES,
-      CraftDepth.ENDER_CHEST_ITEMS,
-      CraftDepth.ENDER_CHEST_BOXES,
-      CraftDepth.BUNDLES_IN_BOXES
-    };
+    CraftDepth[] levels = {CraftDepth.SHALLOW, CraftDepth.DEEP, CraftDepth.DEEPEST};
     assertArrayEquals(levels, CraftDepth.values());
     for (int level = 0; level < levels.length; level++) {
       for (int previous = 0; previous <= level; previous++) {
         assertTrue(levels[level].includes(levels[previous]));
       }
     }
-    assertFalse(CraftDepth.ENDER_CHEST_ITEMS.includes(CraftDepth.ENDER_CHEST_BOXES));
+    assertFalse(CraftDepth.DEEP.includes(CraftDepth.DEEPEST));
   }
 
-  /** Ids sent before level 2 existed keep their containers (old 2 and 3 are now 3 and 4). */
+  /** An older client sends the four earlier ids: each reads as the level holding its containers. */
   @Test
-  void oldIdsKeepTheirMeaning() {
-    assertEquals(CraftDepth.INVENTORY_BOXES, CraftDepth.fromId(OLD_LEVEL_ONE_ID));
-    assertEquals(CraftDepth.ENDER_CHEST_BOXES, CraftDepth.fromId(OLD_LEVEL_TWO_ID));
-    assertEquals(CraftDepth.BUNDLES_IN_BOXES, CraftDepth.fromId(OLD_LEVEL_THREE_ID));
+  void oldIdsReadAsTheirNewLevel() {
+    assertEquals(CraftDepth.SHALLOW, CraftDepth.fromId(OLD_INVENTORY_BOXES_ID));
+    assertEquals(CraftDepth.DEEP, CraftDepth.fromId(OLD_ENDER_CHEST_ITEMS_ID));
+    assertEquals(CraftDepth.DEEP, CraftDepth.fromId(OLD_ENDER_CHEST_BOXES_ID));
+    assertEquals(CraftDepth.DEEPEST, CraftDepth.fromId(OLD_BUNDLES_IN_BOXES_ID));
+  }
+
+  @Test
+  void newIdsAreNotTheOldOnes() {
+    for (CraftDepth depth : CraftDepth.values()) {
+      assertTrue(depth.id() > OLD_ENDER_CHEST_ITEMS_ID, depth.name());
+    }
   }
 
   @Test
@@ -81,7 +101,7 @@ class CraftScopeTest {
     for (CraftDepth depth : CraftDepth.values()) {
       assertEquals(depth, CraftDepth.fromId(depth.id()));
     }
-    assertEquals(CraftDepth.INVENTORY_BOXES, CraftDepth.fromId(UNKNOWN_ID));
-    assertEquals(CraftDepth.INVENTORY_BOXES, CraftDepth.DEFAULT);
+    assertEquals(CraftDepth.SHALLOW, CraftDepth.fromId(UNKNOWN_ID));
+    assertEquals(CraftDepth.SHALLOW, CraftDepth.DEFAULT);
   }
 }

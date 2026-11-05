@@ -3,49 +3,48 @@ package com.einsteinmods.shulkertoolkit.core;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Which containers crafting from boxes reads for one player: always the shulker boxes in the
- * inventory, plus what the depth and the server allow. Constants only, so resolving allocates
- * nothing.
+ * Which containers one player's {@link CraftDepth} reads, for crafting from boxes, the pick from
+ * boxes and Litematica's material list: always the shulker boxes and bundles in the inventory, plus
+ * what the depth and the server allow. Constants only, so resolving allocates nothing.
  */
 public enum CraftScope {
-  INVENTORY_BOXES(false, false, false),
-  WITH_BUNDLES(false, false, true),
-  WITH_ENDER_CHEST_ITEMS(true, false, false),
-  WITH_ENDER_CHEST_BOXES(true, true, false),
-  WITH_ENDER_CHEST_BOXES_AND_BUNDLES(true, true, true);
+  INVENTORY(StorageSource.INVENTORY_CONTAINER, StorageSource.INVENTORY_CONTAINER),
+  WITH_BUNDLES_IN_BOXES(
+      StorageSource.BUNDLE_IN_INVENTORY_BOX, StorageSource.BUNDLE_IN_INVENTORY_BOX),
+  WITH_ENDER_CHEST(StorageSource.BUNDLE_IN_INVENTORY_BOX, StorageSource.ENDER_CHEST_CONTAINER),
+  WITH_ENDER_CHEST_BUNDLES_IN_BOXES(
+      StorageSource.BUNDLE_IN_INVENTORY_BOX, StorageSource.BUNDLE_IN_ENDER_CHEST_BOX);
 
-  private final boolean enderChestItems;
-  private final boolean enderChestBoxes;
-  private final boolean bundles;
+  private final StorageSource deepestWithoutEnderChest;
+  private final StorageSource deepestWithEnderChest;
 
-  CraftScope(boolean enderChestItems, boolean enderChestBoxes, boolean bundles) {
-    this.enderChestItems = enderChestItems;
-    this.enderChestBoxes = enderChestBoxes;
-    this.bundles = bundles;
-  }
-
-  /** Loose items in the ender chest (only while an ender chest item is carried). */
-  public boolean enderChestItems() {
-    return enderChestItems;
-  }
-
-  /** Shulker boxes inside the ender chest (only while an ender chest item is carried). */
-  public boolean enderChestBoxes() {
-    return enderChestBoxes;
-  }
-
-  /** Bundles inside the shulker boxes read. */
-  public boolean bundles() {
-    return bundles;
+  CraftScope(StorageSource deepestWithoutEnderChest, StorageSource deepestWithEnderChest) {
+    this.deepestWithoutEnderChest = deepestWithoutEnderChest;
+    this.deepestWithEnderChest = deepestWithEnderChest;
   }
 
   /**
-   * The scope for a player, or null when crafting from boxes is off (forbidden by the server or
-   * turned off by the player). The ender chest also needs the server's ender chest preview: it is
-   * what keeps the client's copy of the ender chest current.
+   * The last kind of source read: the scope reads every source number below its {@code end()}.
    *
-   * @param serverAllows the server policy's {@code allowCraftFromBoxes}
-   * @param enabled the player's option
+   * @param enderChestCarried whether an ender chest item is in the inventory (slots 0-35)
+   */
+  public StorageSource deepest(boolean enderChestCarried) {
+    return enderChestCarried ? deepestWithEnderChest : deepestWithoutEnderChest;
+  }
+
+  /** Whether the ender chest is read while an ender chest item is carried. */
+  public boolean readsEnderChest() {
+    return deepestWithEnderChest != deepestWithoutEnderChest;
+  }
+
+  /**
+   * The scope for a player, or null when the feature is off (forbidden by the server or turned off
+   * by the player). The ender chest also needs the server's ender chest preview: it is what keeps
+   * the client's copy of the ender chest current.
+   *
+   * @param serverAllows the server policy's switch for the feature ({@code allowCraftFromBoxes},
+   *     {@code allowPick})
+   * @param enabled the player's option for the feature
    * @param depth the player's depth
    * @param enderPreviewAllowed the server policy's {@code allowEnderPreview}
    */
@@ -54,13 +53,14 @@ public enum CraftScope {
     if (!serverAllows || !enabled) {
       return null;
     }
-    boolean bundles = depth.includes(CraftDepth.BUNDLES_IN_BOXES);
-    if (!enderPreviewAllowed || !depth.includes(CraftDepth.ENDER_CHEST_ITEMS)) {
-      return bundles ? WITH_BUNDLES : INVENTORY_BOXES;
+    if (!depth.includes(CraftDepth.DEEP)) {
+      return INVENTORY;
     }
-    if (!depth.includes(CraftDepth.ENDER_CHEST_BOXES)) {
-      return WITH_ENDER_CHEST_ITEMS;
+    if (!enderPreviewAllowed) {
+      return WITH_BUNDLES_IN_BOXES;
     }
-    return bundles ? WITH_ENDER_CHEST_BOXES_AND_BUNDLES : WITH_ENDER_CHEST_BOXES;
+    return depth.includes(CraftDepth.DEEPEST)
+        ? WITH_ENDER_CHEST_BUNDLES_IN_BOXES
+        : WITH_ENDER_CHEST;
   }
 }

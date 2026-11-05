@@ -79,6 +79,16 @@ public enum StorageKind implements StorageStacking.Layout {
   }
 
   /**
+   * Whether {@code stack}'s contents can be shown and opened in a window. As {@link
+   * #allowModification}, but a stack of ender chests counts: its contents live in the player, so a
+   * stack carries no state per item and a window on it edits only the ender inventory. Clicks stay
+   * with {@link #allowModification} (a right click splits the stack, as vanilla).
+   */
+  public boolean viewable(ItemStack stack) {
+    return this == ENDER_CHEST || allowModification(stack);
+  }
+
+  /**
    * The immutable contents component of {@code stack} (identity changes with the contents), or null
    * for the ender chest, whose contents live in the player.
    */
@@ -90,9 +100,12 @@ public enum StorageKind implements StorageStacking.Layout {
     };
   }
 
-  /** Whether {@code stack} holds anything to show (a single item only, as Easy Shulker Boxes). */
+  /**
+   * Whether {@code stack} holds anything to show: a single item only, as Easy Shulker Boxes, or any
+   * number of ender chests ({@link #viewable}).
+   */
   public boolean hasContents(ItemStack stack, Player player) {
-    if (stack.getCount() != 1) {
+    if (this != ENDER_CHEST && stack.getCount() != 1) {
       return false;
     }
     return switch (this) {
@@ -112,13 +125,14 @@ public enum StorageKind implements StorageStacking.Layout {
   }
 
   /**
-   * Whether {@code other} may go in: never an empty stack, a shulker box or another refused item
-   * ({@code Item#canFitInsideContainerItems}, as vanilla {@code ShulkerBoxSlot#mayPlace}).
+   * Whether {@code other} may go in: never an empty stack. Shulker boxes and bundles refuse a
+   * shulker box and other refused items ({@code Item#canFitInsideContainerItems}, as vanilla {@code
+   * ShulkerBoxSlot#mayPlace}); the ender chest takes anything, as its real inventory.
    */
   public boolean canAccept(ItemStack stack, ItemStack other) {
     return !other.isEmpty()
         && allowModification(stack)
-        && other.getItem().canFitInsideContainerItems();
+        && (this == ENDER_CHEST || other.getItem().canFitInsideContainerItems());
   }
 
   /** How many of {@code other} may go in at most; 0 when {@link #canAccept} refuses. */

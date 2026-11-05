@@ -16,7 +16,9 @@ import org.jspecify.annotations.Nullable;
  * dropped. Version 3 merged {@code itemStorageIndicator} and {@code overrideItemStorageBar} into
  * {@code iconMarker} (both kept) and removed {@code reverseSingleItemScrolling} (fixed off, Easy
  * Shulker Boxes' default). Version 4 renamed the {@code iconMarker} values (the bar shows with the
- * "+" by default): {@code IconMarker}'s serialized alternates map the old values.
+ * "+" by default): {@code IconMarker}'s serialized alternates map the old values. Version 5
+ * replaced the four {@code craftDepth} levels with three: {@code CraftDepth}'s serialized
+ * alternates map the old values.
  */
 public record ClientSettingsFile(
     int schemaVersion,
@@ -30,6 +32,7 @@ public record ClientSettingsFile(
     @Nullable ClickScheme controlScheme,
     @Nullable Boolean nestedItemTooltips,
     @Nullable Boolean bundleInteractions,
+    @Nullable Boolean enderChestInteractions,
     @Nullable PickMode pickMode,
     @Nullable Boolean autoRefill,
     @Nullable Boolean litematicaAutoTakeOut,
@@ -43,8 +46,8 @@ public record ClientSettingsFile(
     @Nullable Boolean pinnedWindows,
     @Nullable Boolean pinnedWindowSounds,
     @Nullable Integer maxPinnedWindows,
-    @Nullable Boolean pinnedWindowsAlwaysRight) {
-  public static final int CURRENT_SCHEMA_VERSION = 4;
+    @Nullable Boolean showEmptyBoxes) {
+  public static final int CURRENT_SCHEMA_VERSION = 5;
   public static final String FILE_NAME = "shulkertoolkit.json";
 
   public static final ClientSettingsFile DEFAULTS = from(ClientPreferences.DEFAULTS);
@@ -62,6 +65,7 @@ public record ClientSettingsFile(
         preferences.controlScheme(),
         preferences.nestedItemTooltips(),
         preferences.bundleInteractions(),
+        preferences.enderChestInteractions(),
         preferences.pickMode(),
         preferences.autoRefill(),
         preferences.litematicaAutoTakeOut(),
@@ -75,7 +79,7 @@ public record ClientSettingsFile(
         preferences.pinnedWindows(),
         preferences.pinnedWindowSounds(),
         preferences.maxPinnedWindows(),
-        preferences.pinnedWindowsAlwaysRight());
+        preferences.showEmptyBoxes());
   }
 
   public ClientPreferences toPreferences() {
@@ -92,6 +96,7 @@ public record ClientSettingsFile(
         orDefault(controlScheme, defaults.controlScheme()),
         orDefault(nestedItemTooltips, defaults.nestedItemTooltips()),
         orDefault(bundleInteractions, defaults.bundleInteractions()),
+        orDefault(enderChestInteractions, defaults.enderChestInteractions()),
         orDefault(pickMode, defaults.pickMode()),
         orDefault(autoRefill, defaults.autoRefill()),
         orDefault(litematicaAutoTakeOut, defaults.litematicaAutoTakeOut()),
@@ -102,7 +107,7 @@ public record ClientSettingsFile(
         orDefault(pinnedWindows, defaults.pinnedWindows()),
         orDefault(pinnedWindowSounds, defaults.pinnedWindowSounds()),
         maxPinnedWindows(defaults.maxPinnedWindows()),
-        orDefault(pinnedWindowsAlwaysRight, defaults.pinnedWindowsAlwaysRight()));
+        orDefault(showEmptyBoxes, defaults.showEmptyBoxes()));
   }
 
   /** Version 2 kept the two parts apart; a missing part takes its part of the default. */

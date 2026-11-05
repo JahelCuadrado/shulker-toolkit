@@ -87,6 +87,20 @@ public final class ClientShulkerState {
             serverPolicy.allowEnderPreview());
   }
 
+  /**
+   * Where the pick from boxes, take-out requests and Litematica's material list look, or null when
+   * the server lacks the mod or forbids picks. Same rule as the server's {@code ShulkerPick#scope}.
+   */
+  public @Nullable CraftScope pickScope() {
+    return serverPolicy == null
+        ? null
+        : CraftScope.resolve(
+            serverPolicy.allowPick(),
+            true,
+            preferences.craftDepth(),
+            serverPolicy.allowEnderPreview());
+  }
+
   /** Pinned windows: the server checks each of their clicks. */
   public boolean pinnedWindowsAllowed() {
     return serverPolicy != null && serverPolicy.allowPinnedWindows();

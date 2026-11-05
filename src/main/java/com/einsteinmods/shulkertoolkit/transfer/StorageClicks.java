@@ -91,15 +91,42 @@ public final class StorageClicks {
     if (!transferAllowed) {
       return TriState.DEFAULT;
     }
-    if (editable(carriedKind, carried, player, menu)) {
-      return TriState.of(stackedOnOther(carriedKind, carried, slot, action, player));
+    if (carriedKind != null) {
+      // The held item decides: when it may not act (its option off, its own menu open, a stack),
+      // the click stays vanilla, never the clicked item taking the held one in.
+      return editable(carriedKind, carried, player, menu)
+          ? TriState.of(stackedOnOther(carriedKind, carried, slot, action, player))
+          : TriState.DEFAULT;
     }
-    if (editable(clickedKind, clicked, player, menu)) {
+    if (editable(clickedKind, clicked, player, menu)
+        || selectedInEnderStack(clickedKind, clicked, carried, action, player, menu)) {
       SlotAccess carriedAccess = SlotAccess.of(menu::getCarried, menu::setCarried);
       return TriState.of(
           otherStackedOnMe(clickedKind, clicked, carried, slot, action, player, carriedAccess));
     }
     return TriState.DEFAULT;
+  }
+
+  /**
+   * A right click with an empty cursor on a stack of ender chests whose contents the player has
+   * chosen in with the wheel: takes that out, as from a single one. Without a choice it splits the
+   * stack, as vanilla. Only the ender chest: its contents are not in the stack, so taking out of it
+   * edits every copy alike.
+   */
+  private static boolean selectedInEnderStack(
+      @Nullable StorageKind kind,
+      ItemStack clicked,
+      ItemStack carried,
+      ClickAction action,
+      Player player,
+      AbstractContainerMenu menu) {
+    return kind == StorageKind.ENDER_CHEST
+        && clicked.getCount() > 1
+        && carried.isEmpty()
+        && action == ClickAction.SECONDARY
+        && StorageStates.of(player).selectedItem() != StorageGrid.NO_ITEM
+        && TransferGate.allowsKind(player, kind)
+        && menu == player.containerMenu;
   }
 
   /**
@@ -119,27 +146,36 @@ public final class StorageClicks {
       StorageStacking<ItemStack> slots = kind.open(self, player, true, single);
       StorageStacking.Removal<ItemStack> removal =
           slots.removeOne(other.isEmpty() ? null : other, other.getCount());
+      // Saved before the slot changes: on the server it can be a slot of the ender inventory, and
+      // this copy would then overwrite what lands in it.
+      kind.save(self, player, slots);
       if (removal != null) {
         ItemStack remainder = slot.safeInsert(removal.key().copyWithCount(removal.count()));
         if (!remainder.isEmpty()) {
           // What the slot refused goes back where it came from; it fitted a moment ago.
-          slots.tryInsert(
+          StorageStacking<ItemStack> current = kind.open(self, player, true, single);
+          current.tryInsert(
               remainder.copy(), remainder.getCount(), remainder.getCount(), removal.slot());
+          kind.save(self, player, current);
         }
         if (!single) {
           playRemoveSound(player);
         }
       }
-      kind.save(self, player, slots);
       broadcastChanges(kind, player);
       return true;
     }
     if (scheme.inserts(primary) && (!other.isEmpty() || single)) {
-      ItemStack taken = slot.safeTake(other.getCount(), other.getCount(), player);
+      // Only what fits leaves the slot, as vanilla bundles: a result slot takes nothing back, and
+      // vanilla Slot#tryRemove gives no part of its stack.
+      int room =
+          kind.open(self, player, true, single).room(other, kind.acceptableCount(self, other));
+      ItemStack taken = room > 0 ? slot.safeTake(other.getCount(), room, player) : ItemStack.EMPTY;
       int moved = 0;
       if (!taken.isEmpty()) {
+        // Opened after the take: on the server the slot can be one of the ender inventory.
         StorageStacking<ItemStack> slots = kind.open(self, player, true, single);
-        moved = slots.tryInsert(taken.copy(), taken.getCount(), kind.acceptableCount(self, taken));
+        moved = slots.tryInsert(taken.copy(), taken.getCount(), taken.getCount());
         taken.shrink(moved);
         kind.save(self, player, slots);
       }
@@ -194,7 +230,7 @@ public final class StorageClicks {
         }
         kind.save(self, player, slots);
       }
-      slot.set(self);
+      storeEdited(kind, self, slot);
       broadcastChanges(kind, player);
       return true;
     }
@@ -210,7 +246,7 @@ public final class StorageClicks {
           playInsertOutcome(player, moved);
         }
       }
-      slot.set(self);
+      storeEdited(kind, self, slot);
       broadcastChanges(kind, player);
       return true;
     }
@@ -236,6 +272,17 @@ public final class StorageClicks {
   /** The selected slot of {@code player}'s container items on this side. */
   public static int selectedItem(Player player) {
     return StorageStates.of(player).selectedItem();
+  }
+
+  /**
+   * Writes the edited item back to its slot. Never the ender chest: its contents are not in {@code
+   * self}, and on the server {@code slot} can be one of those contents, already saved, so this
+   * write would bring back an item that just left it.
+   */
+  private static void storeEdited(StorageKind kind, ItemStack self, Slot slot) {
+    if (kind != StorageKind.ENDER_CHEST) {
+      slot.set(self);
+    }
   }
 
   /** Clears the selection on a plain pickup, as vanilla bundles, and lets vanilla click. */

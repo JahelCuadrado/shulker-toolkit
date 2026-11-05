@@ -4,12 +4,10 @@ import com.einsteinmods.shulkertoolkit.core.CraftScope;
 import com.einsteinmods.shulkertoolkit.core.PlayerPreferences;
 import com.einsteinmods.shulkertoolkit.core.ServerPolicy;
 import com.einsteinmods.shulkertoolkit.mixin.StackedItemContentsAccessor;
-import com.einsteinmods.shulkertoolkit.server.EnderChestSync;
 import com.einsteinmods.shulkertoolkit.server.PlayerSession;
 import com.einsteinmods.shulkertoolkit.server.ServerPlayerSessions;
 import java.util.function.Supplier;
 import net.minecraft.core.Holder;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.StackedItemContents;
@@ -21,20 +19,21 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The recipe book of the crafting table and the inventory ({@link AbstractCraftingMenu}) uses
- * ingredients stored in shulker boxes. Counting hooks vanilla {@code
- * AbstractCraftingMenu#fillCraftSlotsStackedContents}, which both sides call right after {@code
- * Inventory#fillStackedContents}: the client's {@code RecipeBookComponent} when it refreshes which
- * recipes are craftable (on open and on the first tick after the inventory changed, never per
- * frame) and the server's {@code ServerPlaceRecipe#placeRecipe} on a recipe click. Placing hooks
- * {@code ServerPlaceRecipe#moveItemToGrid} only where vanilla finds no loose stack. Furnaces and
- * other recipe book menus never reach either hook.
+ * ingredients stored where the player's depth level reaches (shulker boxes, bundles, the ender
+ * chest). Counting hooks vanilla {@code AbstractCraftingMenu#fillCraftSlotsStackedContents}, which
+ * both sides call right after {@code Inventory#fillStackedContents}: the client's {@code
+ * RecipeBookComponent} when it refreshes which recipes are craftable (on open and on the first tick
+ * after the inventory changed, never per frame) and the server's {@code
+ * ServerPlaceRecipe#placeRecipe} on a recipe click. Placing hooks {@code
+ * ServerPlaceRecipe#moveItemToGrid} only where vanilla finds no loose stack. Furnaces and other
+ * recipe book menus never reach either hook.
  *
- * <p>Cost (measured 2026-10-17, dev-only GameTest harness, M-series Mac, JDK 25; 20,000 refreshes,
- * 1,000 recipe clicks): a book refresh is 0.4 µs in vanilla or with the option off. With 9 full
- * shulker boxes in the inventory and 27 loose stacks in the ender chest: 3.7 µs at level 1, 4.3 µs
- * at level 2, 4.5-4.7 µs at levels 3-4. With 9 boxes of bundles in the inventory and 27 boxes of
- * bundles in the ender chest (4,860 stored stacks): 2.9 / 3.3 / 11.6 / 60.7 µs at levels 1-4. A
- * crafting table recipe click takes 60-90 µs, and 431 µs in that bundle case at level 4, mostly
+ * <p>Cost (measured 2026-11-04, dev-only GameTest harness, M-series Mac, JDK 25; 20,000 book
+ * refreshes per case): with 9 full shulker boxes in the inventory and 27 loose stacks in the ender
+ * chest, 2.3 / 7.3 / 10.2 µs at levels 1-3 (levels 2-3 also look for bundles in every box slot);
+ * with 9 boxes of bundles in the inventory and 27 boxes of bundles in the ender chest (4,860 stored
+ * stacks), 3.0 / 32.8 / 79.9 µs. Measured 2026-10-17: a refresh is 0.4 µs in vanilla or with the
+ * option off, and a crafting table recipe click 60-90 µs (431 µs with all those bundles), mostly
  * vanilla's recipe solve over every counted item type. Paid only on those events, by the player who
  * opened the book or clicked.
  *
@@ -108,13 +107,6 @@ public final class CraftFromBoxes {
         preferences.craftFromBoxes(),
         preferences.craftDepth(),
         policy.allowEnderPreview());
-  }
-
-  /** An ender chest box changed outside an ender chest menu: keep the client's copy current. */
-  static void onEnderSlotChanged(Player player, int slot) {
-    if (player instanceof ServerPlayer serverPlayer) {
-      EnderChestSync.sendSlot(serverPlayer, slot);
-    }
   }
 
   private static @Nullable CraftScope scopeFor(Player player) {

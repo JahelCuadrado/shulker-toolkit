@@ -2,6 +2,7 @@ package com.einsteinmods.shulkertoolkit.client;
 
 import com.einsteinmods.shulkertoolkit.client.config.ClientSettingsFile;
 import com.einsteinmods.shulkertoolkit.client.storage.CollapsibleTooltip;
+import com.einsteinmods.shulkertoolkit.client.storage.EnderMenuScreen;
 import com.einsteinmods.shulkertoolkit.client.storage.StorageFillBar;
 import com.einsteinmods.shulkertoolkit.client.storage.StorageIndicator;
 import com.einsteinmods.shulkertoolkit.client.storage.StorageInput;
@@ -55,7 +56,8 @@ public final class ShulkerToolkitClient implements ClientModInitializer {
     TransferGate.installClientCheck(
         state::transferAllowed,
         state::enderPreviewAllowed,
-        () -> state.preferences().bundleInteractions());
+        () -> state.preferences().bundleInteractions(),
+        () -> state.preferences().enderChestInteractions() && !EnderMenuScreen.isOpen());
     CraftFromBoxes.installClientCheck(state::craftScope);
     StorageClicks.installClientSoundMute(StorageMouseActions::draggingOnOpenScreen);
     StorageScreenHooks.register();

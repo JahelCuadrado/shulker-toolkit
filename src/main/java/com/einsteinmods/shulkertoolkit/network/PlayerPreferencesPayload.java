@@ -23,6 +23,7 @@ public record PlayerPreferencesPayload(PlayerPreferences preferences)
             buffer.writeByte(payload.preferences().pickMode().id());
             buffer.writeBoolean(payload.preferences().autoRefill());
             buffer.writeBoolean(payload.preferences().bundleInteractions());
+            buffer.writeBoolean(payload.preferences().enderChestInteractions());
             buffer.writeBoolean(payload.preferences().pickupOverflowToBoxes());
             buffer.writeBoolean(payload.preferences().pickupDirectToBox());
             buffer.writeBoolean(payload.preferences().craftFromBoxes());
@@ -32,6 +33,7 @@ public record PlayerPreferencesPayload(PlayerPreferences preferences)
               new PlayerPreferencesPayload(
                   new PlayerPreferences(
                       PickMode.fromId(buffer.readByte()),
+                      buffer.readBoolean(),
                       buffer.readBoolean(),
                       buffer.readBoolean(),
                       buffer.readBoolean(),

@@ -176,8 +176,8 @@ final class PinnedWindow {
 
   /**
    * Finds the container item again, level by level; false when it is gone (moved, dropped, more
-   * than one, or no longer editable), and the window closes. A few comparisons per level; copies a
-   * level's slots only when its contents changed.
+   * than one of a kind that holds its own contents, or no longer editable), and the window closes.
+   * A few comparisons per level; copies a level's slots only when its contents changed.
    */
   boolean resolve(AbstractContainerMenu menu, Player player) {
     if (path[0] >= menu.slots.size()) {
@@ -194,7 +194,7 @@ final class PinnedWindow {
       }
       Level current = levels[level];
       if (stack.getItem() != items[level]
-          || !current.kind.allowModification(stack)
+          || !current.kind.viewable(stack)
           || !refresh(current, stack, player, level == depth - 1)) {
         return false;
       }
